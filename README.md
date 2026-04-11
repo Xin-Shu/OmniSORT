@@ -49,6 +49,14 @@ $E_{fuse}$ combines **OmniEuc** with **GIoU** to build a stronger association co
 
 ---
 ## Results
+
+Demonstration video of tracking performance. <br />
+**Footage**: BBC Earth. <br />
+**Top row**: Ground Truth label. <br />
+**Middle row**: predicted label by 2 baselines (SORT and OCSORT). <br />
+**Bottom row**: predicted label by OmniSORT and OmniOCSORT. <br />
+*Note: in case the video cannot rander, the source file locates at <ins> assets/video/demo_bbc_earth.mp4</ins>*
+
 [![Watch the demo](./assets/image/thumbnail_bbc_earth.png)](https://github.com/user-attachments/assets/39593f4a-2d6e-4132-9428-f2031833091a)
 <!-- 
 <video
