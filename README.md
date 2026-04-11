@@ -18,12 +18,12 @@ This repository presents two modifications of SORT-based trackers (SORT and OCSO
 ---
 ## Dataset Snapshot
 <p align="center">
-  <img src="assets/images/demo_trajectory_bbc_earth_lvl0_crop.png" width="49%" alt="Dataset sample 1">
-  <img src="assets/images/demo_trajectory_Q360_20250912_120202_full_crop.png" width="49%" alt="Dataset sample 2">
+  <img src="assets/image/demo_trajectory_bbc_earth_lvl0_crop.png" width="49%" alt="selection of objects from BBC Earth footate">
+  <img src="assets/image/demo_trajectory_Q360_20250912_120202_full_crop.png" width="49%" alt="TCD Flower Bed (QooCam)">
 </p>
 <p align="center">
-  <img src="assets/images/demo_trajectory_qoocam_patio_crop.png" width="49%" alt="Dataset sample 3">
-  <img src="assets/images/demo_trajectory_R0010116_crop.png" width="49%" alt="Dataset sample 4">
+  <img src="assets/image/demo_trajectory_qoocam_patio_crop.png" width="49%" alt="Wicklow Patio (QooCam)">
+  <img src="assets/image/demo_trajectory_R0010116_crop.png" width="49%" alt="Tanzania (ThetaX)">
 </p>
 Representative frames from four omnidirectional sequences illustrating object trajectories. Coloured bounding boxes accumulated over time visualise the per-object tracks in the equirectangular projection. The upper-right frame shows honey bees around a flower bed (after a 90&deg vertical rotation of projection), while the remaining frames show avian species. Insets show zoomed-in crops of several tracked identities, highlighting strong appearance ambiguity.
 
@@ -44,7 +44,7 @@ $E_{fuse}$ combines **OmniEuc** with **GIoU** to build a stronger association co
 ---
 
 ## Results
-[![Watch the demo](./assets/images/thumbnail_bbc_earth.png)](./assets/demo_bbc_earth.mp4)
+[![Watch the demo](./assets/image/thumbnail_bbc_earth.png)]([./assets/video/demo_bbc_earth.gif](https://github.com/user-attachments/assets/39593f4a-2d6e-4132-9428-f2031833091a))
 ### Main Tracking Results
 
 Replace this with your final numbers.
