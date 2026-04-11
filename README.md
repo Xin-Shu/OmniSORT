@@ -23,12 +23,12 @@ Our work focuses on low-cost tracking for small objects in omnidirectional foota
 Below are example frames from the dataset / evaluation setup.
 
 <p align="center">
-  <img src="assets/demo_trajectory_bbc_earth_lvl0_crop.png" width="45%" alt="Dataset sample 1">
-  <img src="assets/demo_trajectory_Q360_20250912_120202_full_crop.png" width="45%" alt="Dataset sample 2">
+  <img src="assets/images/demo_trajectory_bbc_earth_lvl0_crop.png" width="45%" alt="Dataset sample 1">
+  <img src="assets/images/demo_trajectory_Q360_20250912_120202_full_crop.png" width="45%" alt="Dataset sample 2">
 </p>
 <p align="center">
-  <img src="assets/demo_trajectory_qoocam_patio_crop.png" width="45%" alt="Dataset sample 3">
-  <img src="assets/demo_trajectory_R0010116_crop.png" width="45%" alt="Dataset sample 4">
+  <img src="assets/images/demo_trajectory_qoocam_patio_crop.png" width="45%" alt="Dataset sample 3">
+  <img src="assets/images/demo_trajectory_R0010116_crop.png" width="45%" alt="Dataset sample 4">
 </p>
 Representative frames from four omnidirectional sequences illustrating object trajectories. Coloured bounding boxes accumulated over time visualise the per-object tracks in the equirectangular projection. The upper-right frame shows honey bees around a flower bed (after a 90◦ vertical rotation of projection), while the remaining frames show avian species. Insets show zoomed-in crops of several tracked identities, highlighting strong appearance ambiguity.
 
