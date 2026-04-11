@@ -49,12 +49,14 @@ $E_{fuse}$ combines **OmniEuc** with **GIoU** to build a stronger association co
 
 ---
 ## Results
+[![Watch the demo](./assets/image/thumbnail_bbc_earth.png)](https://github.com/user-attachments/assets/39593f4a-2d6e-4132-9428-f2031833091a)
+<!-- 
 <video
   src="https://github.com/user-attachments/assets/39593f4a-2d6e-4132-9428-f2031833091a"
   poster="./assets/image/thumbnail_bbc_earth.png"
   controls
   height="800">
-</video>
+</video> -->
 ### Tracking Results on OmniSmall dataset
 
 ### with ground-truth labels
