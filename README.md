@@ -48,14 +48,13 @@ Standard Euclidean distance does not reflect true proximity when objects are clo
 $E_{fuse}$ combines **OmniEuc** with **GIoU** to build a stronger association cost. This helps the tracker use both seam-aware position cues and box-overlap cues when matching detections across frames.
 
 ---
-
 ## Results
-<!-- <video
+<video
   src="https://github.com/user-attachments/assets/39593f4a-2d6e-4132-9428-f2031833091a"
   poster="./assets/image/thumbnail_bbc_earth.png"
   controls
   height="800">
-</video> -->
+</video>
 ### Tracking Results on OmniSmall dataset
 
 ### with ground-truth labels
