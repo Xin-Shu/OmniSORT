@@ -1,82 +1,50 @@
-# Re-Engineering Sort-Based Algorithms for Low Cost Small Object Tracking from Omnidirectional Footage
+# OmniSORT
 
-**"Re-Engineering Sort-Based Algorithms for Low Cost Small Object Tracking from Omnidirectional Footage"**
+**Re-Engineering Sort-Based Algorithms for Low Cost Small Object Tracking from Omnidirectional Footage**
 
 ---
 
 ## Overview
 
-Tracking very small objects in omnidirectional video is difficult because targets occupy only a tiny fraction of the image, appearance cues are weak, and fisheye distortion further complicates motion estimation and association. This repository contains the code, experiment setup, and result summaries for our ICIP 2026 paper on adapting SORT-style tracking methods to this setting.
+Most multi-object trackers are designed for standard cameras and often rely on heavy appearance models. These assumptions do not work well for low-cost omnidirectional footage, where seam discontinuities and tiny fast-moving targets make tracking difficult.
 
-Our work focuses on low-cost tracking for small objects in omnidirectional footage, with an emphasis on:
-- robust association for tiny, fast-moving targets,
-- lightweight motion modelling,
-- and practical tracking under constrained compute settings.
+This repository presents two modifications of SORT-based trackers (SORT and OCSORT) to adapt multi small objects tracking from omnidirectional footages.
 
-> **Note**
-> Replace this paragraph with the exact abstract from the submitted paper once you are ready to make the repo public.
+## Contributions
 
+- A **seam-aware Kalman filter** that preserves spherical continuity across projection borders;
+- **OmniEuc + GIoU** ($E_{fuse}$) for more robust object association in omnidirectional tracking;
+- **OmniSmall**, a benchmark for small-object tracking in omnidirectional footage, with real-world trajectories, strong distortion, and frequent seam crossings.
 ---
-
 ## Dataset Snapshot
-
-Below are example frames from the dataset / evaluation setup.
-
 <p align="center">
-  <img src="assets/images/demo_trajectory_bbc_earth_lvl0_crop.png" width="45%" alt="Dataset sample 1">
-  <img src="assets/images/demo_trajectory_Q360_20250912_120202_full_crop.png" width="45%" alt="Dataset sample 2">
+  <img src="assets/images/demo_trajectory_bbc_earth_lvl0_crop.png" width="49%" alt="Dataset sample 1">
+  <img src="assets/images/demo_trajectory_Q360_20250912_120202_full_crop.png" width="49%" alt="Dataset sample 2">
 </p>
 <p align="center">
-  <img src="assets/images/demo_trajectory_qoocam_patio_crop.png" width="45%" alt="Dataset sample 3">
-  <img src="assets/images/demo_trajectory_R0010116_crop.png" width="45%" alt="Dataset sample 4">
+  <img src="assets/images/demo_trajectory_qoocam_patio_crop.png" width="49%" alt="Dataset sample 3">
+  <img src="assets/images/demo_trajectory_R0010116_crop.png" width="49%" alt="Dataset sample 4">
 </p>
-Representative frames from four omnidirectional sequences illustrating object trajectories. Coloured bounding boxes accumulated over time visualise the per-object tracks in the equirectangular projection. The upper-right frame shows honey bees around a flower bed (after a 90◦ vertical rotation of projection), while the remaining frames show avian species. Insets show zoomed-in crops of several tracked identities, highlighting strong appearance ambiguity.
+Representative frames from four omnidirectional sequences illustrating object trajectories. Coloured bounding boxes accumulated over time visualise the per-object tracks in the equirectangular projection. The upper-right frame shows honey bees around a flower bed (after a 90&deg vertical rotation of projection), while the remaining frames show avian species. Insets show zoomed-in crops of several tracked identities, highlighting strong appearance ambiguity.
 
 ## Method
 
-Our approach revisits SORT-style tracking for omnidirectional small-object scenarios and introduces modifications designed for weak-appearance, motion-dominated tracking.
+Our approach revisits SORT-style tracking for omnidirectional small-object scenarios and introduces modifications designed for limit compute resource, weak-appearance, motion-dominated tracking.
 
-### 1. OmniEuc
+### 1. $Kalman\ Speed\ Update$: Seam-Aware Motion Model
 
-**OmniEuc** is the proposed association metric tailored to omnidirectional imagery.
+Standard motion updates can break near the association at borders of an equirectangular frame, where an object may appear to jump across the seam. Our seam-aware Kalman speed update accounts for this wrap-around behaviour, giving more stable motion prediction in omnidirectional footage.
+### 2. $OmniEuc$: Seam-Aware Euclidean Distance
 
-**Intuition.**
-Standard image-plane distances are often poorly matched to omnidirectional geometry. OmniEuc is designed to provide a more suitable notion of proximity for associating small objects across frames in this setting.
+Standard Euclidean distance does not reflect true proximity when objects are close across the image seam. OmniEuc fixes this by measuring distance in a seam-aware way, making object association more reliable in omnidirectional views.
+### 3. $E_{fuse}$: Composite Association Metrics
 
-**TODO: add exact paper wording here**
-- What geometric coordinates are used
-- How the distance is computed
-- Why it is preferable to IoU / GIoU / standard Euclidean distance in this scenario
-
----
-
-### 2. Kalman Speed Update
-
-We modify the standard SORT Kalman-filter motion update to better reflect the motion behaviour of small objects in omnidirectional footage.
-
-**Motivation.**
-For tiny objects, box shape and overlap cues can be unstable, while motion can be abrupt and difficult to estimate reliably. A speed-aware update helps stabilize prediction and improve downstream association.
-
-**TODO: add exact paper wording here**
-- What state update is changed
-- Whether velocity is estimated differently
-- How this differs from vanilla SORT / OC-SORT
-
----
-
-### 3. OmniSORT
-
-**OmniSORT** is the resulting tracker obtained by combining:
-- the proposed Kalman speed update,
-- the proposed OmniEuc association,
-- and the SORT-style online tracking pipeline.
-
-At a high level, OmniSORT is intended to remain lightweight while improving association quality for small objects in omnidirectional footage.
+$E_{fuse}$ combines **OmniEuc** with **GIoU** to build a stronger association cost. This helps the tracker use both seam-aware position cues and box-overlap cues when matching detections across frames.
 
 ---
 
 ## Results
-
+[![Watch the demo](./assets/images/thumbnail_bbc_earth.png)](./assets/demo_bbc_earth.mp4)
 ### Main Tracking Results
 
 Replace this with your final numbers.
