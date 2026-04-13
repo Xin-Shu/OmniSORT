@@ -1,2 +1,0 @@
-Date of exp: 2026-04-10 19:32:25.665300; Algorithm: sort_ori
-Seq_name,Num_frames,Tot_track,Runtime(ms),FPS

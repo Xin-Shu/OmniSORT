@@ -8,43 +8,47 @@ import numpy as np
 
 sys.path.append('../utils/')
 import util
-from sort import Sort
+from ocsort import OCSort
 import argparse
 
 
-def sort_ori_process(
-    ip_input_label, ip_output_label,
+def ocsort_ori_process(
+    ip_input_label, ip_output_label, asso_func,
     st_frame_num, ed_frame_num, frame_size, 
-    sort_max_age, sort_min_hits, threshold
+    max_age, min_hits, threshold, det_thresh,
 ):
-    sort = Sort(max_age=sort_max_age, min_hits=sort_min_hits, iou_threshold=threshold,)
+    ocsort = OCSort(
+        max_age=max_age, 
+        min_hits=min_hits, 
+        iou_threshold=threshold,
+        asso_func=asso_func,
+        det_thresh=det_thresh,
+    )
     f_output_label = open(ip_output_label, 'w')
 
     max_id = -1
     dict_input_label = util.load_input_label(ip_input_label, frame_size=frame_size)
     for frame_num in range(st_frame_num, ed_frame_num + 1):
         list_bbox = dict_input_label.get(frame_num, [])
-        boxes = list_bbox
-        
-        boxes_int = util.box_frac_to_box_int(boxes, frame_size)
-        if len(boxes_int) == 0:
-            boxes_int = np.empty((0, 5))
-        else:
-            boxes_int = np.array(boxes_int)
-        
-        res = sort.update(boxes_int)
-        boxes_track = res[:, :-1]
-        boxes_ids = res[:, -1].astype(int)
-        max_id = max(max_id, (max(boxes_ids) if len(boxes_ids) > 0 else -1))
+        list_bbox_int = util.box_frac_to_box_int(list_bbox, frame_size)
+        dets = np.array(list_bbox_int)
 
-        for box_track_int, id_ in zip(boxes_track, boxes_ids):
-            x1_int, y1_int, x2_int, y2_int = box_track_int
-            w_int, h_int = x2_int - x1_int, y2_int - y1_int
+        if dets.size == 0:
+            dets = np.empty((0, 5), dtype=float)
+        
+        img_info = (frame_size[1], frame_size[0], 1.0)
+        img_size = (frame_size[1], frame_size[0])
+        tracks = ocsort.update(dets, img_info, img_size)
+
+        for t in tracks:
+            x1, y1, x2, y2, track_id = t
+            max_id = max(max_id, int(track_id))
+            w = x2 - x1
+            h = y2 - y1
             f_output_label.write(
-                f'{frame_num},{id_},{x1_int:.2f},{y1_int:.2f},{w_int:.2f},{h_int:.2f},-1,-1,-1,-1\n'
+                f'{frame_num},{int(track_id)},{x1:.2f},{y1:.2f},{w:.2f},{h:.2f},-1,-1,-1,-1\n'
             )
     f_output_label.close()
-    sort.reset()
     return max_id
 
 
@@ -83,10 +87,10 @@ def main(args):
         frame_size = (frame_sample.shape[1], frame_sample.shape[0])
 
         time_start = datetime.datetime.now()
-        max_id = sort_ori_process(
-            ip_input_label, ip_output_label,
+        max_id = ocsort_ori_process(
+            ip_input_label, ip_output_label, args.asso_func,
             st_frame_num, ed_frame_num, frame_size,
-            args.sort_max_age, args.sort_min_hits, args.threshold,
+            args.max_age, args.min_hits, args.threshold, args.det_thresh,
         )
         time_end = datetime.datetime.now()
         runtime = (time_end - time_start).microseconds / len(list_frames)
@@ -99,10 +103,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--path_data', type=str, default='dataset/omni_small/')
     parser.add_argument('--input_label_name', type=str, default='det.txt')
-    parser.add_argument('--sort_max_age', type=int, default=10)
-    parser.add_argument('--sort_min_hits', type=int, default=1)
+    parser.add_argument('--max_age', type=int, default=10)
+    parser.add_argument('--min_hits', type=int, default=1)
     parser.add_argument('--threshold', type=float, default=0.3)
+    parser.add_argument('--det_thresh', type=float, default=0.3)
     parser.add_argument('--name_algo', type=str, default='sort_ori')
+    parser.add_argument('--asso_func', type=str, default='iou')
 
     args = parser.parse_args()
 

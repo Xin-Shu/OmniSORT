@@ -4,7 +4,7 @@
 from __future__ import print_function
 
 import numpy as np
-from .association import *
+from association import *
 
 
 def k_previous_obs(observations, cur_age, k):
@@ -67,7 +67,7 @@ class KalmanBoxTracker(object):
         """
         # define constant velocity model
         if not orig:
-          from .kalmanfilter import KalmanFilterNew as KalmanFilter
+          from kalmanfilter import KalmanFilterNew as KalmanFilter
           self.kf = KalmanFilter(dim_x=7, dim_z=4)
         else:
           from filterpy.kalman import KalmanFilter
