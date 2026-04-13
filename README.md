@@ -25,10 +25,17 @@ This repository presents two modifications of SORT-based trackers (SORT and OCSO
   <img src="assets/image/demo_trajectory_qoocam_patio_crop.png" width="49%" alt="Wicklow Patio (QooCam)">
   <img src="assets/image/demo_trajectory_R0010116_crop.png" width="49%" alt="Tanzania (ThetaX)">
 </p>
-Representative frames from four omnidirectional sequences illustrating object trajectories. Coloured bounding boxes accumulated over time visualise the per-object tracks in the equirectangular projection. The upper-right frame shows honey bees around a flower bed (after a 90&deg vertical rotation of projection), while the remaining frames show avian species. Insets show zoomed-in crops of several tracked identities, highlighting strong appearance ambiguity.
+Representative frames from four omnidirectional sequences illustrating object trajectories. Coloured bounding boxes accumulated over time visualise the per-object tracks in the equirectangular projection. The upper-right frame shows honey bees around a flower bed (after a 90&deg vertical rotation of projection), while the remaining frames show avian species. Insets show zoomed-in crops of several tracked identities, highlighting strong appearance ambiguity.<br /><br />
 
-Links to dataset:
-
+**Links to dataset:**<br />
+OmniSmall:
+```bash
+https://huggingface.co/datasets/xinsxins/OmniSmall
+```
+JRDB:
+```bash
+https://jrdb.erc.monash.edu/dataset/panotrack
+```
 
 ## Method
 <p align="center">
