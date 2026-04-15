@@ -19,7 +19,7 @@ def linear_assignment(cost_matrix):
         x, y = linear_sum_assignment(cost_matrix)
         return np.array(list(zip(x, y)))
 
-def load_input_label(ip_input_label, frame_size):
+def load_input_label(ip_input_label, frame_size, with_id=False):
     frame_width, frame_height = frame_size
     assert os.path.exists(ip_input_label), \
         f'ERROR: input label file {ip_input_label} does not exist.'
@@ -28,6 +28,7 @@ def load_input_label(ip_input_label, frame_size):
         for line in f:
             parts = [p.strip() for p in line.strip().split(",")]
             num_frames = int(parts[0])
+            oid = int(parts[1])
             x1 = float(parts[2])
             y1 = float(parts[3])
             w = float(parts[4])
@@ -37,9 +38,15 @@ def load_input_label(ip_input_label, frame_size):
             y2 = y1 + h
             if num_frames not in dict_input_label:
                 dict_input_label[num_frames] = []
-            dict_input_label[num_frames].append([x1 / frame_width, \
-                y1 / frame_height, x2 / frame_width, y2 / frame_height, \
-                conf])
+            if with_id:
+                dict_input_label[num_frames].append(
+                    [oid, x1 / frame_width, y1 / frame_height,
+                          x2 / frame_width, y2 / frame_height, \
+                     conf])
+            else:
+                dict_input_label[num_frames].append([x1 / frame_width, \
+                    y1 / frame_height, x2 / frame_width, y2 / frame_height, \
+                    conf])
     return dict_input_label
 
 def box_frac_to_box_int(boxes_frac, frame_size):

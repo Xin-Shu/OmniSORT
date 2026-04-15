@@ -4,4 +4,4 @@ taskset --cpu-list 0 python3 example.py \
     --name_algo omni_sort \
     --list_cost_types "giou,euc" \
     --list_weights "0.5,0.5" \
-    --threshold 0.7
+    --threshold 0.3

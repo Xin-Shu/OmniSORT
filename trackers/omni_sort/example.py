@@ -17,7 +17,7 @@ def omni_sort_process(
     max_age, min_hits, threshold,
     list_cost_types, list_weights, speed_correction_method, thres_de_velo
 ):
-    sort = OmniSort(
+    tracker = OmniSort(
         max_age=max_age, min_hits=min_hits, threshold=threshold,
         list_cost_types=list_cost_types, list_weights=list_weights,
         thres_de_velo=thres_de_velo, speed_correction_method=speed_correction_method
@@ -30,25 +30,25 @@ def omni_sort_process(
         list_bbox = dict_input_label.get(frame_num, [])
         boxes = list_bbox
         
-        boxes_int = util.box_frac_to_box_int(boxes, frame_size)
-        if len(boxes_int) == 0:
-            boxes_int = np.empty((0, 5))
+        if len(boxes) == 0:
+            boxes = np.empty((0, 5))
         else:
-            boxes_int = np.array(boxes_int)
+            boxes = np.array(boxes)
         
-        res = sort.update(boxes_int)
+        res = tracker.update(boxes)
         boxes_track = res[:, :-1]
         boxes_ids = res[:, -1].astype(int)
         max_id = max(max_id, (max(boxes_ids) if len(boxes_ids) > 0 else -1))
 
-        for box_track_int, id_ in zip(boxes_track, boxes_ids):
+        boxes_track_int = util.box_frac_to_box_int(boxes_track, frame_size)
+        for box_track_int, id_ in zip(boxes_track_int, boxes_ids):
             x1_int, y1_int, x2_int, y2_int = box_track_int
             w_int, h_int = x2_int - x1_int, y2_int - y1_int
             f_output_label.write(
                 f'{frame_num},{id_},{x1_int:.2f},{y1_int:.2f},{w_int:.2f},{h_int:.2f},-1,-1,-1,-1\n'
             )
     f_output_label.close()
-    sort.reset()
+    tracker.reset()
     return max_id
 
 def main(args):
