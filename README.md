@@ -109,11 +109,11 @@ These ablation experiments evaluate the impact of each proposed component in the
 | OmniSORT + IoU | 19.40 | 18.05 | 14.02 | 2215 | 0.0005 | 0.0008 | 0.0006 |
 | OmniSORT + GIoU | 57.81 | 64.14 | 52.90 | 1306 | 0.0683 | 0.0091 | 0.0069 |
 | OmniSORT + OmniEuc | 88.88 | 97.82 | 91.02 | 36 | 0.0012 | 0.0285 | 0.0084 |
-| OmniSORT + $E_{fuse}$ ($\lambda$=0.9) | 90.88 | 97.94 | 94.04 | 18 | 0.0095 | 0.0506 | 0.0037 |
+| OmniSORT + $E_{fuse}$ ($\lambda$=0.9) | 90.88 | 97.94 | 94.04 | 18 | 0.0004 | 0.0280 | 0.0032 |
 | OmniOCSORT + IoU | 76.29 | 79.54 | 72.96 | 190 | 0.0725 | 0.2446 | 0.2499 |
 | OmniOCSORT + GIoU | 88.98 | 88.92 | 88.13 | 50 | 0.0397 | 0.0485 | 0.0331 |
 | OmniOCSORT + OmniEuc | 90.98 | 95.64 | 90.31 | 54 | 0.0049 | 0.0192 | 0.0034 |
-| OmniOCSORT + $E_{fuse}$ ($\lambda$=0.7) | 92.21 | 96.20 | 91.12 | 37 | 0.0049 | 0.0195 | 0.0029 |
+| OmniOCSORT + $E_{fuse}$ ($\lambda$=0.7) | 92.21 | 96.20 | 91.12 | 37 | 0.0072 | 0.0226 | 0.0052 |
 
 ### Performance on JRDB dataset with Ground-Truth labels
 

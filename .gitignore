@@ -1,6 +1,7 @@
 *.ipynb
 dataset/*.png
 dataset/OmniSmall/
-dataset/JRBDPano/
+dataset/JRDBPano/
 *__pycache__/
 *.pyc
+archive/
