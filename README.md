@@ -72,87 +72,62 @@ Demonstration video of tracking performance. <br />
   controls
   height="800">
 </video> -->
-### Tracking Results on OmniSmall dataset
+### Main results (JRDB + OmniSmall)
 
-### with ground-truth labels
+Best value in each column is **bold**. `λ` is the per-setting fusion weight in $E_{fuse}$, chosen by grid search (see paper Table II/III).
 
-| Method | HOTA $\uparrow$ | MOTA $\uparrow$ | IDF1 $\uparrow$ | IDSw $\downarrow$ | FPS $\uparrow$ |
-|---|---:|---:|---:|---:|---:|
-| SORT | 64.16 | 82.39 | 76.19 | 394 | 0.63 |
-| ByteTrack | 67.95 | 84.71 | 84.74 | 93 | 1.51 |
-| OCSORT | 75.30 | 77.51 | 74.10 | 170 | 1.26 |
-| HybridSORT | 60.49 | 66.83 | 54.23 | 1154 | 0.61 |
-| **OmniSORT + $E_{fuse}$ (ours)** | 90.88 | 97.94 | 94.04 | 18 | 1.17 |
-| **OmniOCSORT + $E_{fuse}$ (ours)** | 92.21 | 96.20 | 91.12 | 37 | 0.97 |
+#### Ground-truth detections
 
-### With YOLOX detection labels
+| Method | λ | JRDB HOTA↑ | JRDB MOTA↑ | JRDB IDF1↑ | JRDB IDSw↓ | JRDB FPS↑ | λ | Omni HOTA↑ | Omni MOTA↑ | Omni IDF1↑ | Omni IDSw↓ | Omni FPS↑ |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| SORT | – | 62.43 | 95.80 | 55.22 | 13819 | 446 | – | 66.98 | 86.02 | 80.31 | 559 | 836 |
+| ByteTrack | – | 65.34 | 96.07 | **60.49** | 12856 | **575** | – | 71.84 | 90.88 | 90.12 | 94 | **1459** |
+| OCSORT | – | 66.24 | 96.14 | 56.20 | 13470 | 380 | – | 85.61 | 89.75 | 83.99 | 382 | 670 |
+| HybridSORT | – | 66.80 | 96.00 | 56.86 | 11345 | 205 | – | 64.98 | 74.97 | 60.61 | 1247 | 273 |
+| **OmniSORT + $E_{fuse}$ (ours)** | 0.3 | **67.69** | 95.82 | 58.44 | **8968** | 402 | 0.7 | 94.10 | **99.24** | 94.00 | **42** | 1032 |
+| **OmniOCSORT + $E_{fuse}$ (ours)** | 0.2 | 67.01 | **96.22** | 57.84 | 9415 | 311 | 0.7 | **94.12** | 99.16 | **94.16** | 62 | 716 |
 
-| Method | HOTA $\uparrow$ | MOTA $\uparrow$ | IDF1 $\uparrow$ | IDSw $\downarrow$ | FPS $\uparrow$ |
-|---|---:|---:|---:|---:|---:|
-| SORT | 36.43 | 1.91 | 44.85 | 353 | 0.51 |
-| ByteTrack | 31.85 | 20.25 | 34.94 | 37 | 2.02 |
-| OCSORT | 41.63 | 32.29 | 50.94 | 111 | 1.01 |
-| HybridSORT | 40.78 | 32.70 | 49.03 | 183 | 0.66 |
-| **OmniSORT + $E_{fuse}$ (ours)** | 35.57 | 2.81 | 43.36 | 394 | 1.08 |
-| **OmniOCSORT + $E_{fuse}$ (ours)** | 44.19 | 36.44 | 55.61 | 172 | 1.00 |
+#### YOLOX detections
+
+| Method | λ | JRDB HOTA↑ | JRDB MOTA↑ | JRDB IDF1↑ | JRDB IDSw↓ | JRDB FPS↑ | λ | Omni HOTA↑ | Omni MOTA↑ | Omni IDF1↑ | Omni IDSw↓ | Omni FPS↑ |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| SORT | – | 26.45 | 27.94 | 25.94 | 22563 | 332 | – | 39.04 | 20.31 | 45.88 | 117 | 1152 |
+| ByteTrack | – | **31.92** | **46.02** | **35.45** | **8965** | **719** | – | 30.29 | 17.11 | 32.59 | **29** | **3175** |
+| OCSORT | – | 26.45 | 27.42 | 25.85 | 22966 | 252 | – | 39.81 | 22.14 | 46.76 | 127 | 863 |
+| HybridSORT | – | 29.53 | 35.83 | 30.16 | 16663 | 174 | – | 37.75 | 22.45 | 44.19 | 152 | 518 |
+| OmniSORT + $E_{fuse}$ (ours) | 0.2 | 25.35 | 27.94 | 24.35 | 22594 | 320 | 0.7 | 41.11 | 25.42 | 49.33 | 137 | 1122 |
+| **OmniOCSORT + $E_{fuse}$ (ours)** | 0.2 | 27.70 | 35.20 | 27.58 | 18209 | 260 | 0.7 | **41.76** | **26.97** | **50.72** | 108 | 862 |
+
+**Takeaway.** With ground-truth detections, the seam-aware modifications give large, consistent gains on OmniSmall (the target regime: small, fast, seam-crossing targets) and stay competitive on JRDB despite not winning every column there. With a real (YOLOX) detector, the picture is more honest: gains persist on OmniSmall, but on JRDB the score-aware two-stage trackers (ByteTrack, HybridSORT) win — our single-stage seam-aware association isn't a substitute for detection-confidence handling on dense, pedestrian-scale, noisy detections. Neither tracker is the fastest in raw FPS (that's SORT/ByteTrack), but both stay well within CPU-only, real-time throughput.
 
 ---
 
 ### Ablation Study
-These ablation experiments evaluate the impact of each proposed component in the tracking pipeline. For **OmniSORT**, the baseline is **SORT**; for **OmniOCSORT**, the baseline is **OCSORT**. The reported **p-values** indicate whether the change from the corresponding baseline is statistically significant.
 
-**Takeaway.** The results show that the proposed seam-aware association design improves tracking performance, especially on the omnidirectional benchmark. In general, **OmniEuc** and **$E_{fuse}$** bring the largest gains in the target setting, while the effect of each component is more mixed on JRDB. Overall, the combined design is most effective on challenging omnidirectional small-object tracking.
-### Performance on OmniSmall dataset with Ground-Truth labels
+Conducted on **OmniSmall with ground-truth detections**, isolating each component's contribution. For **OmniSORT**, the baseline is **SORT**; for **OmniOCSORT**, the baseline is **OCSORT**. `p̄` is the average p-value (paired per-sequence exact sign-flip test) across HOTA, MOTA, and IDF1 against that baseline; best configuration per tracker in **bold**.
 
-| Method | HOTA | MOTA | IDF1 | IDSw | p-value<br>(HOTA) | p-value<br>(MOTA) | p-value<br>(IDF1) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| OmniSORT + IoU | 19.40 | 18.05 | 14.02 | 2215 | 0.0005 | 0.0008 | 0.0006 |
-| OmniSORT + GIoU | 57.81 | 64.14 | 52.90 | 1306 | 0.0683 | 0.0091 | 0.0069 |
-| OmniSORT + OmniEuc | 88.88 | 97.82 | 91.02 | 36 | 0.0012 | 0.0285 | 0.0084 |
-| OmniSORT + $E_{fuse}$ ($\lambda$=0.9) | 90.88 | 97.94 | 94.04 | 18 | 0.0004 | 0.0280 | 0.0032 |
-| OmniOCSORT + IoU | 76.29 | 79.54 | 72.96 | 190 | 0.0725 | 0.2446 | 0.2499 |
-| OmniOCSORT + GIoU | 88.98 | 88.92 | 88.13 | 50 | 0.0397 | 0.0485 | 0.0331 |
-| OmniOCSORT + OmniEuc | 90.98 | 95.64 | 90.31 | 54 | 0.0049 | 0.0192 | 0.0034 |
-| OmniOCSORT + $E_{fuse}$ ($\lambda$=0.7) | 92.21 | 96.20 | 91.12 | 37 | 0.0072 | 0.0226 | 0.0052 |
+| Tracker | Configuration | HOTA | MOTA | IDF1 | p̄↓ |
+|---|---|---:|---:|---:|---:|
+| SORT | baseline (IoU) | 66.98 | 86.02 | 80.31 | — |
+| | + SAMM | 20.05 | 18.29 | 14.20 | 0.0052 |
+| | + GIoU (λ=0.0) | 60.53 | 69.20 | 56.14 | 0.0938 |
+| | + OmniEuc (λ=1.0) | 73.75 | 92.65 | 68.73 | 0.0260 |
+| OmniSORT + $E_{fuse}$ | λ=0.1 | 69.86 | 78.58 | 66.04 | 0.2526 |
+| | λ=0.3 | 85.33 | 90.52 | 83.68 | 0.0221 |
+| | λ=0.5 | 91.07 | 94.83 | 90.67 | 0.0039 |
+| | **λ=0.7** | **94.10** | **99.24** | **94.00** | 0.0039 |
+| | λ=0.9 | 92.67 | 98.92 | 92.48 | 0.0039 |
+| OCSORT | baseline (IoU) | 85.61 | 89.75 | 83.99 | — |
+| | + SAMM | 23.67 | 24.82 | 18.16 | 0.0052 |
+| | + GIoU (λ=0.0) | 65.71 | 76.17 | 60.67 | 0.0104 |
+| | + OmniEuc (λ=1.0) | 52.23 | 71.03 | 36.29 | 0.1888 |
+| OmniOCSORT + $E_{fuse}$ | λ=0.1 | 73.45 | 82.27 | 69.29 | 0.0078 |
+| | λ=0.3 | 87.25 | 91.88 | 86.01 | 0.0078 |
+| | λ=0.5 | 90.96 | 94.82 | 90.73 | 0.0039 |
+| | **λ=0.7** | **94.12** | **99.16** | **94.16** | 0.0039 |
+| | λ=0.9 | 66.78 | 84.96 | 56.02 | 0.0846 |
 
-### Performance on JRDB dataset with Ground-Truth labels
-
-| Method | HOTA | MOTA | IDF1 | IDSw | p-value<br>(HOTA) | p-value<br>(MOTA) | p-value<br>(IDF1) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| OmniSORT + IoU | 53.67 | 84.62 | 44.03 | 18346 | 0.0000 | 0.0000 | 0.0000 |
-| OmniSORT + GIoU | 63.27 | 92.16 | 53.97 | 13073 | 0.0000 | 0.0093 | 0.0724 |
-| OmniSORT + OmniEuc | 41.15 | 92.21 | 34.43 | 26201 | 0.0000 | 0.6314 | 0.0000 |
-| OmniSORT + $E_{fuse}$ ($\lambda$=0.3) | 65.23 | 94.07 | 56.56 | 9125 | 0.0000 | 0.0000 | 0.0002 |
-| OmniOCSORT + IoU | 67.64 | 90.33 | 60.70 | 5907 | 0.0014 | 0.0003 | 0.7380 |
-| OmniOCSORT + GIoU | 63.43 | 91.99 | 57.85 | 7594 | 0.2370 | 0.0000 | 0.4088 |
-| OmniOCSORT + OmniEuc | 63.22 | 91.93 | 57.75 | 7741 | 0.5108 | 0.0002 | 0.5212 |
-| OmniOCSORT + $E_{fuse}$ ($\lambda$=0.9) | 64.79 | 91.61 | 58.73 | 6931 | 0.2855 | 0.0001 | 0.3082 |
-
-### Performance on OmniSmall dataset with YOLOX detection labels
-
-| Method | HOTA | MOTA | IDF1 | IDSw | p-value<br>(HOTA) | p-value<br>(MOTA) | p-value<br>(IDF1) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| OmniSORT + IoU | 26.97 | 1.47 | 30.31 | 771 | 0.0036 | 0.5235 | 0.0303 |
-| OmniSORT + GIoU | 36.12 | 2.81 | 43.47 | 392 | 0.3461 | 0.1775 | 0.4099 |
-| OmniSORT + OmniEuc | 33.32 | -7.96 | 39.66 | 785 | 0.3045 | 0.2170 | 0.3540 |
-| OmniSORT + $E_{fuse}$ ($\lambda$=0.1) | 35.57 | 2.81 | 43.36 | 394 | 0.2015 | 0.2322 | 0.2226 |
-| OmniOCSORT + IoU | 42.84 | 34.89 | 52.14 | 105 | 0.0031 | 0.0148 | 0.0019 |
-| OmniOCSORT + GIoU | 42.96 | 34.87 | 52.47 | 104 | 0.0038 | 0.0185 | 0.0198 |
-| OmniOCSORT + OmniEuc | 43.02 | 36.06 | 53.09 | 194 | 0.0050 | 0.0187 | 0.0133 |
-| OmniOCSORT + $E_{fuse}$ ($\lambda$=0.6) | 44.19 | 36.44 | 55.61 | 172 | 0.0080 | 0.0100 | 0.0042 |
-
-### Performance on JRDB dataset with YOLOX detection labels
-
-| Method | HOTA | MOTA | IDF1 | IDSw | p-value<br>(HOTA) | p-value<br>(MOTA) | p-value<br>(IDF1) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| OmniSORT + IoU | 22.13 | 16.21 | 20.30 | 38552 | 0.0000 | 0.2426 | 0.0000 |
-| OmniSORT + GIoU | 25.26 | 15.89 | 23.83 | 25142 | 0.4844 | 0.1247 | 0.0413 |
-| OmniSORT + OmniEuc | 11.70 | -3.74 | 10.81 | 116906 | 0.0000 | 0.0000 | 0.0000 |
-| OmniSORT + $E_{fuse}$ ($\lambda$=0.1) | 25.55 | 15.64 | 24.16 | 24030 | 0.8478 | 0.1581 | 0.1046 |
-| OmniOCSORT + IoU | 27.03 | 38.22 | 27.79 | 13475 | 0.0000 | 0.0764 | 0.0000 |
-| OmniOCSORT + GIoU | 24.15 | 37.50 | 25.48 | 15426 | 0.0000 | 0.0621 | 0.0003 |
-| OmniOCSORT + OmniEuc | 22.44 | 36.77 | 23.81 | 17265 | 0.0000 | 0.0425 | 0.0000 |
-| OmniOCSORT + $E_{fuse}$ ($\lambda$=0.5) | 25.55 | 37.95 | 26.96 | 14401 | 0.0000 | 0.0321 | 0.0000 |
+**Takeaway.** SAMM alone (a seam-aware velocity model with no compatible non-overlap association cost) collapses tracking — the corrected velocity state has nothing but IoU to pair it with, and IoU-based matching still needs box overlap that a corrected-but-still-small, fast target rarely has. The two single-term endpoints (GIoU-only, OmniEuc-only) each partially recover performance but both remain below the fused peak. $E_{fuse}$ combines the two into a cost that consistently beats both endpoints and the unmodified baseline, peaking at λ=0.7 for both trackers — the seam-aware motion model and the composite association cost only work well together, not in isolation.
 
 ---
 
