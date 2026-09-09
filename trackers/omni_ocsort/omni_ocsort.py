@@ -54,13 +54,32 @@ def speed_direction(bbox1, bbox2):
     return speed / norm
 
 
+def signed_principal_wrap(value, period=1.0):
+    """Map a periodic value to the signed principal interval."""
+    return ((value + period / 2.0) % period) - period / 2.0
+
+
+def horizontal_velocity_change_ratio(previous_velocity, updated_velocity, epsilon=1e-6):
+    return np.abs(updated_velocity - previous_velocity) / np.maximum(np.abs(previous_velocity), epsilon)
+
+
+def horizontal_velocity_change_exceeds_threshold(previous_velocity, updated_velocity, threshold, epsilon=1e-6):
+    return bool(np.any(horizontal_velocity_change_ratio(previous_velocity, updated_velocity, epsilon) > threshold))
+
+
+def correct_horizontal_velocity(previous_velocity, updated_velocity, threshold, epsilon=1e-6):
+    if horizontal_velocity_change_exceeds_threshold(previous_velocity, updated_velocity, threshold, epsilon):
+        return signed_principal_wrap(updated_velocity)
+    return updated_velocity
+
+
 class KalmanBoxTracker(object):
     """
     This class represents the internal state of individual tracked objects observed as bbox.
     """
     count = 0
 
-    def __init__(self, bbox, thres_de_velo=10.0, delta_t=3, speed_correction_method='prev_speed'):
+    def __init__(self, bbox, thres_de_velo=10.0, delta_t=3, speed_correction_method='signed_principal_wrap'):
         """
         Initialises a tracker using initial bounding box.
 
@@ -101,6 +120,8 @@ class KalmanBoxTracker(object):
         self.hit_streak = 0
         self.thres_de_velo = thres_de_velo
         self.speed_correction_method = speed_correction_method
+        assert self.speed_correction_method in ['prev_speed', 'signed_principal_wrap', 're_update'], \
+            f"Speed correction method {self.speed_correction_method} not recognized."
         self.age = 0
         """
         NOTE: [-1,-1,-1,-1,-1] is a compromising placeholder for non-observation status, the same for the return of 
@@ -128,7 +149,7 @@ class KalmanBoxTracker(object):
                 if previous_box is None:
                     previous_box = self.last_observation
                 """
-                  Estimate the track speed direction with observations \Delta t steps away
+                  Estimate the track speed direction with observations \\Delta t steps away
                 """
                 self.velocity = speed_direction(previous_box, bbox)
             
@@ -145,31 +166,26 @@ class KalmanBoxTracker(object):
             self.hits += 1
             self.hit_streak += 1
 
-            _prev_x_speed_, _prev_y_speed_ = self.kf.x[4], self.kf.x[5]
+            _prev_x_speed_, _prev_y_speed_ = self.kf.x[4].copy(), self.kf.x[5].copy()
             self.kf.update(convert_bbox_to_z(bbox))
             _upda_x_speed_, _upda_y_speed_ = self.kf.x[4], self.kf.x[5]
-            _perc_x_acce_ = abs((_upda_x_speed_ - _prev_x_speed_) / _prev_x_speed_) if _prev_x_speed_ != 0 else abs(_upda_x_speed_)
-            _perc_y_acce_ = abs((_upda_y_speed_ - _prev_y_speed_) / _prev_y_speed_) if _prev_y_speed_ != 0 else abs(_upda_y_speed_)
+            _if_correct_x_speed_ = horizontal_velocity_change_exceeds_threshold(
+                _prev_x_speed_, _upda_x_speed_, self.thres_de_velo
+            )
             
             if self.speed_correction_method == 'prev_speed':
-                self.kf.x[4] = _prev_x_speed_ if _perc_x_acce_ > self.thres_de_velo else _upda_x_speed_
-                self.kf.x[5] = _prev_y_speed_ if _perc_y_acce_ > self.thres_de_velo else _upda_y_speed_
-            elif self.speed_correction_method == 'mod_by_1':
-                self.kf.x[4] = ((_upda_x_speed_) % 1.0) if _perc_x_acce_ > self.thres_de_velo else _upda_x_speed_
-                self.kf.x[5] = ((_upda_y_speed_) % 1.0) if _perc_y_acce_ > self.thres_de_velo else _upda_y_speed_
+                self.kf.x[4] = _prev_x_speed_ if _if_correct_x_speed_ else _upda_x_speed_
+            elif self.speed_correction_method == 'signed_principal_wrap':
+                self.kf.x[4] = correct_horizontal_velocity(
+                    _prev_x_speed_, _upda_x_speed_, self.thres_de_velo
+                )
             elif self.speed_correction_method == 're_update':
-                if (_perc_x_acce_ > self.thres_de_velo) and _prev_x_speed_ > 0:
+                if _if_correct_x_speed_ and _prev_x_speed_ > 0:
                     bbox[0] = bbox[0] + 1.0
                     bbox[2] = bbox[2] + 1.0
-                elif (_perc_x_acce_ > self.thres_de_velo) and _prev_x_speed_ < 0:
+                elif _if_correct_x_speed_ and _prev_x_speed_ < 0:
                     bbox[0] = bbox[0] - 1.0
                     bbox[2] = bbox[2] - 1.0
-                if (_perc_y_acce_ > self.thres_de_velo) and _prev_y_speed_ > 0:
-                    bbox[1] = bbox[1] + 1.0
-                    bbox[3] = bbox[3] + 1.0
-                elif (_perc_y_acce_ > self.thres_de_velo) and _prev_y_speed_ < 0:
-                    bbox[1] = bbox[1] - 1.0
-                    bbox[3] = bbox[3] - 1.0
                 self.kf.update(convert_bbox_to_z(bbox))
             
             self.kf.x[:4] = convert_bbox_to_z(bbox)
@@ -187,7 +203,6 @@ class KalmanBoxTracker(object):
         self.kf.predict()
 
         self.kf.x[0] = self.kf.x[0] % 1.0
-        self.kf.x[1] = self.kf.x[1] % 1.0
 
         self.age += 1
         if(self.time_since_update > 0):
@@ -214,11 +229,12 @@ ASSO_FUNCS = {  "iou": iou_batch,
                 "giou": giou_batch,
                 "ciou": ciou_batch,
                 "diou": diou_batch,
-                "euc": omnieuc_batch,}
+                "euc": ct_dist,
+                "omni_euc": omnieuc_batch,}
 
 
 class OmniOCSORT(object):
-    def __init__(self, det_thresh, thres_de_velo=10.0, max_age=30, min_hits=3, speed_correction_method='prev_speed',
+    def __init__(self, det_thresh, thres_de_velo=10.0, max_age=30, min_hits=3, speed_correction_method='signed_principal_wrap',
         iou_threshold=0.3, delta_t=3, asso_func="iou", list_weights=[], inertia=0.2, use_byte=False):
         """
         Sets key parameters for SORT
@@ -303,8 +319,10 @@ class OmniOCSORT(object):
         k_observations = np.array(
             [k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers])
 
-        matched, unmatched_dets, unmatched_trks = associate(
-            dets, trks, self.iou_threshold, velocities, k_observations, self.inertia)
+        e_fuse = self.weighted_association(dets, trks)
+        matched, unmatched_dets, unmatched_trks = associate_efuse(
+            dets, trks, e_fuse, self.iou_threshold, velocities, k_observations, self.inertia)
+
         for m in matched:
             self.trackers[m[1]].update(dets[m[0], :])
 
@@ -314,19 +332,14 @@ class OmniOCSORT(object):
         # BYTE association
         if self.use_byte and len(dets_second) > 0 and unmatched_trks.shape[0] > 0:
             u_trks = trks[unmatched_trks]
-            iou_left = self.weighted_association(dets_second, u_trks)
-            iou_left = np.array(iou_left)
-            if iou_left.max() > self.iou_threshold:
-                """
-                    NOTE: by using a lower threshold, e.g., self.iou_threshold - 0.1, you may
-                    get a higher performance especially on MOT17/MOT20 datasets. But we keep it
-                    uniform here for simplicity
-                """
-                matched_indices = linear_assignment(-iou_left)
+            e_fuse = self.weighted_association(dets_second, u_trks)
+            e_fuse = np.array(e_fuse)
+            if e_fuse.min() < self.iou_threshold:
+                matched_indices = linear_assignment(e_fuse)
                 to_remove_trk_indices = []
                 for m in matched_indices:
                     det_ind, trk_ind = m[0], unmatched_trks[m[1]]
-                    if iou_left[m[0], m[1]] < self.iou_threshold:
+                    if e_fuse[m[0], m[1]] > self.iou_threshold:
                         continue
                     self.trackers[trk_ind].update(dets_second[det_ind, :])
                     to_remove_trk_indices.append(trk_ind)
@@ -335,20 +348,15 @@ class OmniOCSORT(object):
         if unmatched_dets.shape[0] > 0 and unmatched_trks.shape[0] > 0:
             left_dets = dets[unmatched_dets]
             left_trks = last_boxes[unmatched_trks]
-            iou_left = self.weighted_association(left_dets, left_trks)
-            iou_left = np.array(iou_left)
-            if iou_left.max() > self.iou_threshold:
-                """
-                    NOTE: by using a lower threshold, e.g., self.iou_threshold - 0.1, you may
-                    get a higher performance especially on MOT17/MOT20 datasets. But we keep it
-                    uniform here for simplicity
-                """
-                rematched_indices = linear_assignment(-iou_left)
+            e_fuse = self.weighted_association(left_dets, left_trks)
+            e_fuse = np.array(e_fuse)
+            if e_fuse.min() < self.iou_threshold:
+                rematched_indices = linear_assignment(e_fuse)
                 to_remove_det_indices = []
                 to_remove_trk_indices = []
                 for m in rematched_indices:
                     det_ind, trk_ind = unmatched_dets[m[0]], unmatched_trks[m[1]]
-                    if iou_left[m[0], m[1]] < self.iou_threshold:
+                    if e_fuse[m[0], m[1]] > self.iou_threshold:
                         continue
                     self.trackers[trk_ind].update(dets[det_ind, :])
                     to_remove_det_indices.append(det_ind)

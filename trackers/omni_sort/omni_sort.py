@@ -4,6 +4,26 @@ from scipy.optimize import linear_sum_assignment
 from filterpy.kalman import KalmanFilter
 
 np.random.seed(0)
+eps = 1e-6
+
+
+def signed_principal_wrap(value, period=1.0):
+    """Map a periodic value to the signed principal interval."""
+    return ((value + period / 2.0) % period) - period / 2.0
+
+
+def horizontal_velocity_change_ratio(previous_velocity, updated_velocity, epsilon=eps):
+    return np.abs(updated_velocity - previous_velocity) / np.maximum(np.abs(previous_velocity), epsilon)
+
+
+def horizontal_velocity_change_exceeds_threshold(previous_velocity, updated_velocity, threshold, epsilon=eps):
+    return bool(np.any(horizontal_velocity_change_ratio(previous_velocity, updated_velocity, epsilon) > threshold))
+
+
+def correct_horizontal_velocity(previous_velocity, updated_velocity, threshold, epsilon=eps):
+    if horizontal_velocity_change_exceeds_threshold(previous_velocity, updated_velocity, threshold, epsilon):
+        return signed_principal_wrap(updated_velocity)
+    return updated_velocity
 
 
 def linear_assignment(cost_matrix):
@@ -40,8 +60,7 @@ def giou_batch(bboxes1, bboxes2):
     # assert((wc > 0).all() and (hc > 0).all())
     area_enclose = wc * hc 
     giou = iou - (area_enclose - union) / area_enclose
-    giou = (giou + 1.) / 2.0 # resize from (-1,1) to (0,1)
-    return 1 - giou
+    return 1.0 - ((giou + 1.0) / 2.0)
 
 def omnieuc_batch(bb_observe, bb_predict):
     bb_predict = np.array(bb_predict) 
@@ -55,23 +74,16 @@ def omnieuc_batch(bb_observe, bb_predict):
     bb_predict_center_x = (bb_predict[..., 0] + bb_predict[..., 2]) / 2
     bb_predict_center_y = (bb_predict[..., 1] + bb_predict[..., 3]) / 2
 
-    euclidean = np.sqrt(
-        (bb_observe_center_x - bb_predict_center_x) ** 2 +
-        (bb_observe_center_y - bb_predict_center_y) ** 2
-    ) / np.sqrt(2)
-
     dx = np.abs(bb_observe_center_x - bb_predict_center_x)
     dy = np.abs(bb_observe_center_y - bb_predict_center_y)
 
     dx_omni = np.minimum(dx, 1.0 - dx)
-    dy_omni = np.minimum(dy, 1.0 - dy)
 
-    omni_euclidean = np.sqrt(dx_omni ** 2 + dy_omni ** 2) / np.sqrt(2)
+    euclidean = np.sqrt(dx ** 2 + dy ** 2) / np.sqrt(2)
+    omni_euclidean = np.sqrt(dx_omni ** 2 + dy ** 2) / np.sqrt(2)
+
     omni_euc = np.minimum(euclidean, omni_euclidean)
-
-    if omni_euc.shape[0] == 0:
-        return omni_euc
-    return (omni_euc - omni_euc.min()) / max((omni_euc.max() - omni_euc.min()), 1e-6)
+    return omni_euc
 
 def iou_batch(bb_test, bb_gt):
     """
@@ -128,7 +140,7 @@ class KalmanBoxTracker(object):
     count = 0
     def __init__(
         self, 
-        bbox, thres_de_velo=2.5, speed_correction_method='prev_speed',
+        bbox, thres_de_velo=2.5, speed_correction_method='signed_principal_wrap',
         if_use_kalman_loc=False, oid=None, if_omni=False
     ):
         """
@@ -138,7 +150,7 @@ class KalmanBoxTracker(object):
         self.kf = KalmanFilter(dim_x=8, dim_z=4) 
         self.thres_de_velo = thres_de_velo
         self.speed_correction_method = speed_correction_method
-        assert self.speed_correction_method in ['prev_speed', 'mod_by_1', 'mod_by_1_plus_0.5', 're_update'], \
+        assert self.speed_correction_method in ['prev_speed', 'signed_principal_wrap', 're_update'], \
             f"Speed correction method {self.speed_correction_method} not recognized."
         self.kf.F = np.array([
             [1., 0., 0., 0., 1., 0., 0., 0.],
@@ -187,34 +199,26 @@ class KalmanBoxTracker(object):
         self.history = []
         self.hits += 1
         self.hit_streak += 1
-        _prev_x_speed_, _prev_y_speed_ = self.kf.x[4], self.kf.x[5]
+        _prev_x_speed_, _prev_y_speed_ = self.kf.x[4].copy(), self.kf.x[5].copy()
         self.kf.update(convert_bbox_to_z(bbox))
         _upda_x_speed_, _upda_y_speed_ = self.kf.x[4], self.kf.x[5]
-        _perc_x_acce_ = abs((_upda_x_speed_ - _prev_x_speed_) / _prev_x_speed_) if _prev_x_speed_ != 0 else 0
-        _perc_y_acce_ = abs((_upda_y_speed_ - _prev_y_speed_) / _prev_y_speed_) if _prev_y_speed_ != 0 else 0
+        _if_correct_x_speed_ = horizontal_velocity_change_exceeds_threshold(
+            _prev_x_speed_, _upda_x_speed_, self.thres_de_velo
+        )
 
         if self.speed_correction_method == 'prev_speed':
-            self.kf.x[4] = _prev_x_speed_ if _perc_x_acce_ > self.thres_de_velo else _upda_x_speed_
-            self.kf.x[5] = _prev_y_speed_ if _perc_y_acce_ > self.thres_de_velo else _upda_y_speed_
-        elif self.speed_correction_method == 'mod_by_1':
-            self.kf.x[4] = ((_upda_x_speed_) % 1.0) if _perc_x_acce_ > self.thres_de_velo else _upda_x_speed_
-            self.kf.x[5] = ((_upda_y_speed_) % 1.0) if _perc_y_acce_ > self.thres_de_velo else _upda_y_speed_
-        elif self.speed_correction_method == 'mod_by_1_plus_0.5':
-            self.kf.x[4] = ((_upda_x_speed_ + 0.5) % 1.0) - 0.5 if _perc_x_acce_ > self.thres_de_velo else _upda_x_speed_
-            self.kf.x[5] = ((_upda_y_speed_ + 0.5) % 1.0) - 0.5 if _perc_y_acce_ > self.thres_de_velo else _upda_y_speed_
+            self.kf.x[4] = _prev_x_speed_ if _if_correct_x_speed_ else _upda_x_speed_
+        elif self.speed_correction_method == 'signed_principal_wrap':
+            self.kf.x[4] = correct_horizontal_velocity(
+                _prev_x_speed_, _upda_x_speed_, self.thres_de_velo
+            )
         elif self.speed_correction_method == 're_update':
-            if (_perc_x_acce_ > self.thres_de_velo) and _prev_x_speed_ > 0:
+            if _if_correct_x_speed_ and _prev_x_speed_ > 0:
                 bbox[0] = bbox[0] + 1.0
                 bbox[2] = bbox[2] + 1.0
-            elif (_perc_x_acce_ > self.thres_de_velo) and _prev_x_speed_ < 0:
+            elif _if_correct_x_speed_ and _prev_x_speed_ < 0:
                 bbox[0] = bbox[0] - 1.0
                 bbox[2] = bbox[2] - 1.0
-            if (_perc_y_acce_ > self.thres_de_velo) and _prev_y_speed_ > 0:
-                bbox[1] = bbox[1] + 1.0
-                bbox[3] = bbox[3] + 1.0
-            elif (_perc_y_acce_ > self.thres_de_velo) and _prev_y_speed_ < 0:
-                bbox[1] = bbox[1] - 1.0
-                bbox[3] = bbox[3] - 1.0
             self.kf.update(convert_bbox_to_z(bbox))
 
         self.kf.x[:4] = convert_bbox_to_z(bbox)
@@ -232,7 +236,6 @@ class KalmanBoxTracker(object):
         self.kf.predict()
 
         self.kf.x[0] = self.kf.x[0] % 1.0 if self.if_omni else self.kf.x[0]
-        self.kf.x[1] = self.kf.x[1] % 1.0 if self.if_omni else self.kf.x[1]
 
         self.age += 1
         if (self.time_since_update > 0):
@@ -264,7 +267,7 @@ def associate_detections_to_trackers(
     if len(list_weights) == 0 or len(list_weights) != len(list_cost_types):
         if 'iou' in list_cost_types:
             cost_matrix += iou_batch(detections, trackers)
-        if 'euc' in list_cost_types:
+        if 'omni_euc' in list_cost_types:
             cost_matrix += omnieuc_batch(detections, trackers,)
         if 'giou' in list_cost_types:
             cost_matrix += giou_batch(detections, trackers)
@@ -275,7 +278,7 @@ def associate_detections_to_trackers(
             weight = list_weights[idx] / weight_sum
             if cost_type == 'iou':
                 cost_matrix += weight * iou_batch(detections, trackers)
-            if cost_type == 'euc':
+            if cost_type in ('euc', 'omni_euc'):
                 cost_matrix += weight * omnieuc_batch(detections, trackers,)
             if cost_type == 'giou':
                 cost_matrix += weight * giou_batch(detections, trackers)
@@ -316,7 +319,7 @@ def associate_detections_to_trackers(
 class OmniSort(object):
     def __init__(self, 
             max_age, min_hits, threshold, thres_de_velo=2.5,
-            speed_correction_method='prev_speed',
+            speed_correction_method='signed_principal_wrap',
             list_cost_types=[], list_weights=[],
             if_omni=True, 
             if_use_kalman_loc=False

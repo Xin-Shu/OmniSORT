@@ -15,7 +15,9 @@ summary to:
 """
 
 import importlib.util
+import glob
 import os
+import re
 import sys
 import tempfile
 
@@ -47,6 +49,17 @@ def _count_frames(label_path):
     return max_f
 
 
+def _count_sequence_frames(clip_dir, gt_path):
+    """Use image extent when available so empty-GT frames remain evaluable."""
+    frame_paths = glob.glob(os.path.join(clip_dir, 'frame', '*.png'))
+    frame_nums = []
+    for frame_path in frame_paths:
+        match = re.search(r'(\d+)$', os.path.splitext(os.path.basename(frame_path))[0])
+        if match:
+            frame_nums.append(int(match.group(1)))
+    return max(frame_nums) if frame_nums else _count_frames(gt_path)
+
+
 def run_trackeval(fp_dataset, algo_name, gt_name='gt.txt'):
     """
     fp_dataset : absolute path to dataset folder (e.g. .../OmniSmall)
@@ -65,7 +78,7 @@ def run_trackeval(fp_dataset, algo_name, gt_name='gt.txt'):
         ip_gt     = os.path.join(clip_dir, gt_name)
         ip_result = os.path.join(clip_dir, f'result_{algo_name}.txt')
         if os.path.isdir(clip_dir) and os.path.exists(ip_gt) and os.path.exists(ip_result):
-            seq_info[name] = _count_frames(ip_gt)
+            seq_info[name] = _count_sequence_frames(clip_dir, ip_gt)
 
     if not seq_info:
         raise FileNotFoundError(

@@ -5,3 +5,6 @@ dataset/JRDBPano/
 *__pycache__/
 *.pyc
 archive/
+poster/
+evals/
+*.pth

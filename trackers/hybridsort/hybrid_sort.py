@@ -30,7 +30,11 @@ def convert_bbox_to_z(bbox):
     y = bbox[1] + h/2.
     s = w * h  # scale is just area
     r = w / float(h+1e-6)
-    return np.array([x, y, s, r]).reshape((4, 1))
+    score = bbox[4]
+    if score:
+        return np.array([x, y, s, score, r]).reshape((5, 1))
+    else:
+        return np.array([x, y, s, r]).reshape((4, 1))
 
 
 def convert_x_to_bbox(x, score=None):
@@ -38,8 +42,9 @@ def convert_x_to_bbox(x, score=None):
     Takes a bounding box in the centre form [x,y,s,r] and returns it in the form
       [x1,y1,x2,y2] where x1,y1 is the top left and x2,y2 is the bottom right
     """
-    w = np.sqrt(x[2] * x[3])
+    w = np.sqrt(x[2] * x[4])
     h = x[2] / w
+    score = x[3]
     if(score == None):
       return np.array([x[0]-w/2., x[1]-h/2., x[0]+w/2., x[1]+h/2.]).reshape((1, 4))
     else:
@@ -53,6 +58,33 @@ def speed_direction(bbox1, bbox2):
     norm = np.sqrt((cy2-cy1)**2 + (cx2-cx1)**2) + 1e-6
     return speed / norm
 
+def speed_direction_lt(bbox1, bbox2):
+    cx1, cy1 = bbox1[0], bbox1[1]
+    cx2, cy2 = bbox2[0], bbox2[1]
+    speed = np.array([cy2-cy1, cx2-cx1])
+    norm = np.sqrt((cy2-cy1)**2 + (cx2-cx1)**2) + 1e-6
+    return speed / norm
+
+def speed_direction_rt(bbox1, bbox2):
+    cx1, cy1 = bbox1[0], bbox1[3]
+    cx2, cy2 = bbox2[0], bbox2[3]
+    speed = np.array([cy2-cy1, cx2-cx1])
+    norm = np.sqrt((cy2-cy1)**2 + (cx2-cx1)**2) + 1e-6
+    return speed / norm
+
+def speed_direction_lb(bbox1, bbox2):
+    cx1, cy1 = bbox1[2], bbox1[1]
+    cx2, cy2 = bbox2[2], bbox2[1]
+    speed = np.array([cy2-cy1, cx2-cx1])
+    norm = np.sqrt((cy2-cy1)**2 + (cx2-cx1)**2) + 1e-6
+    return speed / norm
+
+def speed_direction_rb(bbox1, bbox2):
+    cx1, cy1 = bbox1[2], bbox1[3]
+    cx2, cy2 = bbox2[2], bbox2[3]
+    speed = np.array([cy2-cy1, cx2-cx1])
+    norm = np.sqrt((cy2-cy1)**2 + (cx2-cx1)**2) + 1e-6
+    return speed / norm
 
 class KalmanBoxTracker(object):
     """
@@ -60,30 +92,58 @@ class KalmanBoxTracker(object):
     """
     count = 0
 
-    def __init__(self, bbox, delta_t=3, orig=False):
+    def __init__(self, bbox, delta_t=3, orig=False, args=None):
         """
         Initialises a tracker using initial bounding box.
 
         """
         # define constant velocity model
+        # if not orig and not args.kalman_GPR:
         if not orig:
-          from kalmanfilter import KalmanFilterNew as KalmanFilter
-          self.kf = KalmanFilter(dim_x=7, dim_z=4)
+          # from .kalmanfilter import KalmanFilterNew as KalmanFilter
+          from kalmanfilter_score_new import KalmanFilterNew_score_new as KalmanFilter_score_new
+          self.kf = KalmanFilter_score_new(dim_x=9, dim_z=5)
+          # self.kf_score = KalmanFilter_score(dim_x=2, dim_z=1)
         else:
           from filterpy.kalman import KalmanFilter
           self.kf = KalmanFilter(dim_x=7, dim_z=4)
-        self.kf.F = np.array([[1, 0, 0, 0, 1, 0, 0], [0, 1, 0, 0, 0, 1, 0], [0, 0, 1, 0, 0, 0, 1], [
-                            0, 0, 0, 1, 0, 0, 0],  [0, 0, 0, 0, 1, 0, 0], [0, 0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 0, 1]])
-        self.kf.H = np.array([[1, 0, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0, 0],
-                            [0, 0, 1, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0, 0]])
+        # u, v, s, c, r, ~u, ~v, ~s, ~c
+        self.kf.F = np.array([[1, 0, 0, 0, 0, 1, 0, 0, 0],
+                              [0, 1, 0, 0, 0, 0, 1, 0, 0],
+                              [0, 0, 1, 0, 0, 0, 0, 1, 0],
+                              [0, 0, 0, 1, 0, 0, 0, 0, 1],
+                              [0, 0, 0, 0, 1, 0, 0, 0, 0],
+                              [0, 0, 0, 0, 0, 1, 0, 0, 0],
+                              [0, 0, 0, 0, 0, 0, 1, 0, 0],
+                              [0, 0, 0, 0, 0, 0, 0, 1, 0],
+                              [0, 0, 0, 0, 0, 0, 0, 0, 1]])
+        self.kf.H = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0],
+                              [0, 1, 0, 0, 0, 0, 0, 0, 0],
+                              [0, 0, 1, 0, 0, 0, 0, 0, 0],
+                              [0, 0, 0, 1, 0, 0, 0, 0, 0],
+                              [0, 0, 0, 0, 1, 0, 0, 0, 0]])
+        # self.kf_score.F = np.array([[1, 1],
+        #                             [0, 1]])
+        # self.kf_score.H = np.array([[1, 0]])
 
         self.kf.R[2:, 2:] *= 10.
-        self.kf.P[4:, 4:] *= 1000.  # give high uncertainty to the unobservable initial velocities
+        self.kf.P[5:, 5:] *= 1000.  # give high uncertainty to the unobservable initial velocities
         self.kf.P *= 10.
         self.kf.Q[-1, -1] *= 0.01
-        self.kf.Q[4:, 4:] *= 0.01
+        self.kf.Q[-2, -2] *= 0.01
+        self.kf.Q[5:, 5:] *= 0.01
 
-        self.kf.x[:4] = convert_bbox_to_z(bbox)
+        self.kf.x[:5] = convert_bbox_to_z(bbox)
+
+
+        # self.kf_score.R[0:, 0:] *= 10.
+        # self.kf_score.P[1:, 1:] *= 1000.  # give high uncertainty to the unobservable initial velocities
+        # self.kf_score.P *= 10.
+        # self.kf_score.Q[-1, -1] *= 0.01
+        # self.kf_score.Q[1:, 1:] *= 0.01
+        # self.kf_score.x[:1] = bbox[-1]
+
+
         self.time_since_update = 0
         self.id = KalmanBoxTracker.count
         KalmanBoxTracker.count += 1
@@ -91,41 +151,78 @@ class KalmanBoxTracker(object):
         self.hits = 0
         self.hit_streak = 0
         self.age = 0
+        self.age_recover_for_cbiou = 0
         """
         NOTE: [-1,-1,-1,-1,-1] is a compromising placeholder for non-observation status, the same for the return of 
         function k_previous_obs. It is ugly and I do not like it. But to support generate observation array in a 
         fast and unified way, which you would see below k_observations = np.array([k_previous_obs(...]]), let's bear it for now.
         """
         self.last_observation = np.array([-1, -1, -1, -1, -1])  # placeholder
+        self.last_observation_save = np.array([-1, -1, -1, -1, -1])
         self.observations = dict()
         self.history_observations = []
-        self.velocity = None
+        # self.velocity = None
+        self.velocity_lt = None
+        self.velocity_rt = None
+        self.velocity_lb = None
+        self.velocity_rb = None
         self.delta_t = delta_t
+        self.confidence_pre = None
+        self.confidence = bbox[-1]
+        self.args = args
+        self.kf.args = args
+        # self.kf_score.args = args
 
     def update(self, bbox):
         """
         Updates the state vector with observed bbox.
         """
+        # velocity = None
+        velocity_lt = None
+        velocity_rt = None
+        velocity_lb = None
+        velocity_rb = None
         if bbox is not None:
             if self.last_observation.sum() >= 0:  # no previous observation
                 previous_box = None
                 for i in range(self.delta_t):
-                    dt = self.delta_t - i
-                    if self.age - dt in self.observations:
-                        previous_box = self.observations[self.age-dt]
-                        break
+                    # dt = self.delta_t - i
+                    if self.age - i - 1 in self.observations:
+                        previous_box = self.observations[self.age - i - 1]
+                        if velocity_lt is not None:
+                            # velocity += speed_direction(previous_box, bbox)
+                            velocity_lt += speed_direction_lt(previous_box, bbox)
+                            velocity_rt += speed_direction_rt(previous_box, bbox)
+                            velocity_lb += speed_direction_lb(previous_box, bbox)
+                            velocity_rb += speed_direction_rb(previous_box, bbox)
+                        else:
+                            # velocity = speed_direction(previous_box, bbox)
+                            velocity_lt = speed_direction_lt(previous_box, bbox)
+                            velocity_rt = speed_direction_rt(previous_box, bbox)
+                            velocity_lb = speed_direction_lb(previous_box, bbox)
+                            velocity_rb = speed_direction_rb(previous_box, bbox)
+                        # break
                 if previous_box is None:
                     previous_box = self.last_observation
-                """
-                  Estimate the track speed direction with observations \Delta t steps away
-                """
-                self.velocity = speed_direction(previous_box, bbox)
-            
+                    # self.velocity = speed_direction(previous_box, bbox)
+                    # self.velocity = norm_vel(self.velocity)
+                    self.velocity_lt = speed_direction_lt(previous_box, bbox)
+                    self.velocity_rt = speed_direction_rt(previous_box, bbox)
+                    self.velocity_lb = speed_direction_lb(previous_box, bbox)
+                    self.velocity_rb = speed_direction_rb(previous_box, bbox)
+                else:
+                    # self.velocity = velocity
+                    # self.velocity = norm_vel(self.velocity)
+                    self.velocity_lt = velocity_lt
+                    self.velocity_rt = velocity_rt
+                    self.velocity_lb = velocity_lb
+                    self.velocity_rb = velocity_rb
             """
               Insert new observations. This is a ugly way to maintain both self.observations
               and self.history_observations. Bear it for the moment.
             """
             self.last_observation = bbox
+            self.last_observation_save = bbox
             self.observations[self.age] = bbox
             self.history_observations.append(bbox)
 
@@ -134,23 +231,33 @@ class KalmanBoxTracker(object):
             self.hits += 1
             self.hit_streak += 1
             self.kf.update(convert_bbox_to_z(bbox))
+            # self.kf_score.update(bbox[-1])
+            self.confidence_pre = self.confidence
+            self.confidence = bbox[-1]
+            self.age_recover_for_cbiou = self.age
         else:
             self.kf.update(bbox)
+            # self.kf_score.update(bbox)
+            self.confidence_pre = None
 
     def predict(self):
         """
         Advances the state vector and returns the predicted bounding box estimate.
         """
-        if((self.kf.x[6]+self.kf.x[2]) <= 0):
-            self.kf.x[6] *= 0.0
+        if((self.kf.x[7]+self.kf.x[2]) <= 0):
+            self.kf.x[7] *= 0.0
 
         self.kf.predict()
+        # self.kf_score.predict()
         self.age += 1
         if(self.time_since_update > 0):
             self.hit_streak = 0
         self.time_since_update += 1
         self.history.append(convert_x_to_bbox(self.kf.x))
-        return self.history[-1]
+        if not self.confidence_pre:
+            return self.history[-1], np.clip(self.kf.x[3], self.args.track_thresh, 1.0), np.clip(self.confidence, 0.1, self.args.track_thresh)
+        else:
+            return self.history[-1], np.clip(self.kf.x[3], self.args.track_thresh, 1.0), np.clip(self.confidence - (self.confidence_pre - self.confidence), 0.1, self.args.track_thresh)
 
     def get_state(self):
         """
@@ -169,11 +276,13 @@ ASSO_FUNCS = {  "iou": iou_batch,
                 "giou": giou_batch,
                 "ciou": ciou_batch,
                 "diou": diou_batch,
-                "ct_dist": ct_dist}
+                "ct_dist": ct_dist,
+                "hmiou": hmiou
+                }
 
 
-class OCSort(object):
-    def __init__(self, det_thresh, max_age=30, min_hits=3, 
+class Hybrid_Sort(object):
+    def __init__(self, args, det_thresh, max_age=30, min_hits=3,
         iou_threshold=0.3, delta_t=3, asso_func="iou", inertia=0.2, use_byte=False):
         """
         Sets key parameters for SORT
@@ -185,11 +294,10 @@ class OCSort(object):
         self.frame_count = 0
         self.det_thresh = det_thresh
         self.delta_t = delta_t
-        self.asso_func_name = asso_func
-        # 'omni_euc' needs frame dimensions, so it is bound per-frame in update().
-        self.asso_func = ASSO_FUNCS[asso_func] if asso_func in ASSO_FUNCS else None
+        self.asso_func = ASSO_FUNCS[asso_func]
         self.inertia = inertia
         self.use_byte = use_byte
+        self.args = args
         KalmanBoxTracker.count = 0
 
     def update(self, output_results, img_info, img_size):
@@ -215,8 +323,6 @@ class OCSort(object):
         img_h, img_w = img_info[0], img_info[1]
         scale = min(img_size[0] / float(img_h), img_size[1] / float(img_w))
         bboxes /= scale
-        if self.asso_func_name == 'omni_euc':
-            self.asso_func = lambda a, b: omni_euc_batch(a, b, img_w, img_h)
         dets = np.concatenate((bboxes, np.expand_dims(scores, axis=-1)), axis=1)
         inds_low = scores > 0.1
         inds_high = scores < self.det_thresh
@@ -226,20 +332,31 @@ class OCSort(object):
         dets = dets[remain_inds]
 
         # get predicted locations from existing trackers.
-        trks = np.zeros((len(self.trackers), 5))
+        trks = np.zeros((len(self.trackers), 6))
         to_del = []
         ret = []
         for t, trk in enumerate(trks):
-            pos = self.trackers[t].predict()[0]
-            trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
+            pos, kalman_score, simple_score = self.trackers[t].predict()
+            try:
+                trk[:] = [pos[0][0], pos[0][1], pos[0][2], pos[0][3], kalman_score[0], simple_score[0]]
+            except:
+                trk[:] = [pos[0][0], pos[0][1], pos[0][2], pos[0][3], kalman_score[0], simple_score]
             if np.any(np.isnan(pos)):
                 to_del.append(t)
         trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
         for t in reversed(to_del):
             self.trackers.pop(t)
 
-        velocities = np.array(
-            [trk.velocity if trk.velocity is not None else np.array((0, 0)) for trk in self.trackers])
+        # velocities = np.array(
+        #     [trk.velocity if trk.velocity is not None else np.array((0, 0)) for trk in self.trackers])
+        velocities_lt = np.array(
+            [trk.velocity_lt if trk.velocity_lt is not None else np.array((0, 0)) for trk in self.trackers])
+        velocities_rt = np.array(
+            [trk.velocity_rt if trk.velocity_rt is not None else np.array((0, 0)) for trk in self.trackers])
+        velocities_lb = np.array(
+            [trk.velocity_lb if trk.velocity_lb is not None else np.array((0, 0)) for trk in self.trackers])
+        velocities_rb = np.array(
+            [trk.velocity_rb if trk.velocity_rb is not None else np.array((0, 0)) for trk in self.trackers])
         last_boxes = np.array([trk.last_observation for trk in self.trackers])
         k_observations = np.array(
             [k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers])
@@ -247,9 +364,14 @@ class OCSort(object):
         """
             First round of association
         """
-        matched, unmatched_dets, unmatched_trks = associate(
-            dets, trks, self.iou_threshold, velocities, k_observations, self.inertia,
-            asso_func=self.asso_func)
+        if self.args.TCM_first_step:
+            matched, unmatched_dets, unmatched_trks = associate_4_points_with_score(
+                dets, trks, self.iou_threshold, velocities_lt, velocities_rt, velocities_lb, velocities_rb,
+                k_observations, self.inertia, self.asso_func, self.args)
+        else:
+            matched, unmatched_dets, unmatched_trks = associate_4_points(
+                dets, trks, self.iou_threshold, velocities_lt, velocities_rt, velocities_lb, velocities_rb, k_observations, self.inertia, self.asso_func, self.args)
+
         for m in matched:
             self.trackers[m[1]].update(dets[m[0], :])
 
@@ -259,7 +381,7 @@ class OCSort(object):
         # BYTE association
         if self.use_byte and len(dets_second) > 0 and unmatched_trks.shape[0] > 0:
             u_trks = trks[unmatched_trks]
-            iou_left = self.asso_func(dets_second, u_trks)          # iou between low score detections and unmatched tracks
+            iou_left = self.asso_func(dets_second, u_trks)
             iou_left = np.array(iou_left)
             if iou_left.max() > self.iou_threshold:
                 """
@@ -267,6 +389,8 @@ class OCSort(object):
                     get a higher performance especially on MOT17/MOT20 datasets. But we keep it
                     uniform here for simplicity
                 """
+                if self.args.TCM_byte_step:
+                    iou_left -= np.array(cal_score_dif_batch_two_score(dets_second, u_trks) * self.args.TCM_byte_step_weight)
                 matched_indices = linear_assignment(-iou_left)
                 to_remove_trk_indices = []
                 for m in matched_indices:
@@ -282,6 +406,7 @@ class OCSort(object):
             left_trks = last_boxes[unmatched_trks]
             iou_left = self.asso_func(left_dets, left_trks)
             iou_left = np.array(iou_left)
+
             if iou_left.max() > self.iou_threshold:
                 """
                     NOTE: by using a lower threshold, e.g., self.iou_threshold - 0.1, you may
@@ -306,12 +431,12 @@ class OCSort(object):
 
         # create and initialise new trackers for unmatched detections
         for i in unmatched_dets:
-            trk = KalmanBoxTracker(dets[i, :], delta_t=self.delta_t)
+            trk = KalmanBoxTracker(dets[i, :], delta_t=self.delta_t, args=self.args)
             self.trackers.append(trk)
         i = len(self.trackers)
         for trk in reversed(self.trackers):
             if trk.last_observation.sum() < 0:
-                d = trk.get_state()[0]
+                d = trk.get_state()[0][:4]
             else:
                 """
                     this is optional to use the recent observation or the kalman filter prediction,
@@ -432,3 +557,5 @@ class OCSort(object):
         if(len(ret)>0):
             return np.concatenate(ret)
         return np.empty((0, 7))
+
+

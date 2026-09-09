@@ -1,4 +1,6 @@
 taskset --cpu-list 0 python3 example.py \
     --path_data ../../dataset/OmniSmall/test \
     --input_label_name gt.txt \
-    --name_algo sort_ori
+    --det_thresh 0.3 \
+    --asso_func hmiou \
+    --name_algo hybridsort_ori

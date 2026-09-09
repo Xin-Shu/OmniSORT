@@ -56,6 +56,22 @@ def giou_batch(bboxes1, bboxes2):
     return giou
 
 
+def omni_euc_batch(bboxes1, bboxes2, img_w, img_h):
+    """Omni-Euclidean similarity (higher is better, in [~0.21,1]).
+    Centres are normalised by the frame size, the horizontal gap is wrapped at
+    the left-right seam, and distance is mapped to similarity by 1-dist. Mirrors
+    the OmniSORT/OmniOCSORT cost (without SAMM). bboxes are [x1,y1,x2,y2]."""
+    cx1 = ((bboxes1[:, 0] + bboxes1[:, 2]) / 2.0) / float(img_w)
+    cy1 = ((bboxes1[:, 1] + bboxes1[:, 3]) / 2.0) / float(img_h)
+    cx2 = ((bboxes2[:, 0] + bboxes2[:, 2]) / 2.0) / float(img_w)
+    cy2 = ((bboxes2[:, 1] + bboxes2[:, 3]) / 2.0) / float(img_h)
+    dx = np.abs(cx1[:, None] - cx2[None, :])
+    dy = np.abs(cy1[:, None] - cy2[None, :])
+    dx = np.minimum(dx, 1.0 - dx)
+    dist = np.sqrt(dx ** 2 + dy ** 2) / np.sqrt(2)
+    return 1.0 - dist
+
+
 def diou_batch(bboxes1, bboxes2):
     """
     :param bbox_p: predict of bbox(N,4)(x1,y1,x2,y2)
@@ -280,7 +296,7 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
 
 
-def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc_weight):    
+def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc_weight, asso_func=iou_batch):
     if(len(trackers)==0):
         return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,5),dtype=int)
 
@@ -296,7 +312,7 @@ def associate(detections, trackers, iou_threshold, velocities, previous_obs, vdc
     valid_mask = np.ones(previous_obs.shape[0])
     valid_mask[np.where(previous_obs[:,4]<0)] = 0
     
-    iou_matrix = iou_batch(detections, trackers)
+    iou_matrix = asso_func(detections, trackers)
     scores = np.repeat(detections[:,-1][:, np.newaxis], trackers.shape[0], axis=1)
     # iou_matrix = iou_matrix * scores # a trick sometiems works, we don't encourage this
     valid_mask = np.repeat(valid_mask[:, np.newaxis], X.shape[1], axis=1)

@@ -3,6 +3,7 @@ import sys
 import cv2
 import datetime
 import glob
+import time
 import numpy as np
 import argparse
 
@@ -25,6 +26,7 @@ def omni_sort_process(
     f_output_label = open(ip_output_label, 'w')
 
     max_id = -1
+    tracker_runtime_s = 0.0
     dict_input_label = util.load_input_label(ip_input_label, frame_size=frame_size)
     for frame_num in range(st_frame_num, ed_frame_num + 1):
         list_bbox = dict_input_label.get(frame_num, [])
@@ -35,7 +37,9 @@ def omni_sort_process(
         else:
             boxes = np.array(boxes)
         
+        tracker_time_start = time.perf_counter()
         res = tracker.update(boxes)
+        tracker_runtime_s += time.perf_counter() - tracker_time_start
         boxes_track = res[:, :-1]
         boxes_ids = res[:, -1].astype(int)
         max_id = max(max_id, (max(boxes_ids) if len(boxes_ids) > 0 else -1))
@@ -49,7 +53,7 @@ def omni_sort_process(
             )
     f_output_label.close()
     tracker.reset()
-    return max_id
+    return max_id, tracker_runtime_s
 
 def main(args):
 
@@ -73,12 +77,13 @@ def main(args):
         os.remove(ip_runtime_log)
     f_log = open(ip_runtime_log, 'w')
     f_log.write(f'Date of exp: {datetime.datetime.now()}; Algorithm: {name_algo}\n')
-    f_log.write(f'Seq_name,Num_frames,Tot_track,Runtime(ms),FPS\n')
+    f_log.write(
+        'Seq_name,Num_frames,Tot_track,TrackerTime(s),TrackerRuntime(ms/frame),'
+        'TrackerFPS,RunnerTime(s),RunnerRuntime(ms/frame),RunnerFPS\n'
+    )
 
     for seq_name in list_seqs_names:
         ip_input_label = os.path.join(fp_data, seq_name, args.input_label_name)
-        num_frame = util.get_num_frame_from_label(ip_input_label)
-        print(f'[INFO] Processing sequence {seq_name} with {num_frame} frames.')
         fp_frame = os.path.join(fp_data, seq_name, 'frame')
         assert os.path.exists(ip_input_label), f'ERROR: Input label file {ip_input_label} does not exist.'
 
@@ -89,22 +94,36 @@ def main(args):
         assert len(list_frames) > 0, f'ERROR: no frames found in {fp_frame}.'
         assert os.path.basename(list_frames[0]) == 'img0001.png', \
             f'ERROR: the first frame should be img0001.png, but got {os.path.basename(list_frames[0])}.'
+        num_frame = len(list_frames)
+        last_labeled_frame = util.get_num_frame_from_label(ip_input_label)
+        assert last_labeled_frame <= num_frame, \
+            f'ERROR: label frame {last_labeled_frame} exceeds the {num_frame} image frames in {fp_frame}.'
+        print(
+            f'[INFO] Processing sequence {seq_name} with {num_frame} image frames '
+            f'and labels through frame {last_labeled_frame}.'
+        )
         st_frame_num, ed_frame_num = 1, num_frame
-        assert ed_frame_num > st_frame_num, f'ERROR: ed_frame_num {ed_frame_num} should be >= st_frame_num {st_frame_num}.'
+        assert ed_frame_num >= st_frame_num, f'ERROR: ed_frame_num {ed_frame_num} should be >= st_frame_num {st_frame_num}.'
         frame_sample = cv2.imread(list_frames[0])
         frame_size = (frame_sample.shape[1], frame_sample.shape[0])
 
-        time_start = datetime.datetime.now()
-        max_id = omni_sort_process(
+        runner_time_start = time.perf_counter()
+        max_id, tracker_runtime_s = omni_sort_process(
             ip_input_label, ip_output_label,
             st_frame_num, ed_frame_num, frame_size,
             args.max_age, args.min_hits, args.threshold,
             list_cost_types, list_weights, args.speed_correction_method, args.thres_de_velo
         )
-        time_end = datetime.datetime.now()
-        runtime = (time_end - time_start).microseconds / len(list_frames)
-        fps = 1.0 / runtime if runtime > 0 else 0.0
-        f_log.write(f'{seq_name},{len(list_frames)},{max_id},{runtime:.2f},{fps:.2f}\n')
+        runner_runtime_s = time.perf_counter() - runner_time_start
+        tracker_runtime_ms = tracker_runtime_s * 1000.0 / num_frame
+        tracker_fps = num_frame / tracker_runtime_s if tracker_runtime_s > 0 else 0.0
+        runner_runtime_ms = runner_runtime_s * 1000.0 / num_frame
+        runner_fps = num_frame / runner_runtime_s if runner_runtime_s > 0 else 0.0
+        f_log.write(
+            f'{seq_name},{num_frame},{max_id},{tracker_runtime_s:.9f},'
+            f'{tracker_runtime_ms:.6f},{tracker_fps:.6f},{runner_runtime_s:.9f},'
+            f'{runner_runtime_ms:.6f},{runner_fps:.6f}\n'
+        )
     f_log.close()
 
 
@@ -119,12 +138,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--list_cost_types', type=str, default='giou,euc')
     parser.add_argument('--list_weights', type=str, default=None)
-    parser.add_argument('--speed_correction_method', type=str, default='mod_by_1')
+    parser.add_argument('--speed_correction_method', type=str, default='signed_principal_wrap')
     parser.add_argument('--thres_de_velo', type=float, default=10.0)
 
     args = parser.parse_args()
 
     main(args)
-
-
 

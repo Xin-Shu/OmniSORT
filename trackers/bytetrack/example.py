@@ -3,29 +3,40 @@ import sys
 import cv2
 import datetime
 import glob
+import shutil
 import time
 import numpy as np
-import argparse
 
 sys.path.append('../utils/')
 import util
-from omni_ocsort import OmniOCSORT
+from byte_tracker import BYTETracker
+import argparse
 
 
-def omni_ocsort_process(
+class ByteTrackArgs:
+    """Minimal args container expected by BYTETracker."""
+
+    def __init__(self, track_thresh=0.6, track_buffer=30,
+                 match_thresh=0.8, mot20=False):
+        self.track_thresh = track_thresh
+        self.track_buffer = track_buffer
+        self.match_thresh = match_thresh
+        self.mot20 = mot20
+
+
+def bytetrack_process(
     ip_input_label, ip_output_label,
-    st_frame_num, ed_frame_num, frame_size, 
-    max_age, min_hits, threshold, det_thresh,
-    list_cost_types, list_weights, speed_correction_method, thres_de_velo,
+    st_frame_num, ed_frame_num, frame_size,
+    track_thresh, track_buffer, match_thresh, mot20, frame_rate,
     use_det_conf=False,
 ):
-    tracker = OmniOCSORT(
-        max_age=max_age, min_hits=min_hits, iou_threshold=threshold,
-        asso_func=list_cost_types, det_thresh=det_thresh,
-        list_weights=list_weights, speed_correction_method=speed_correction_method,
-        thres_de_velo=thres_de_velo
+    bt_args = ByteTrackArgs(
+        track_thresh=track_thresh,
+        track_buffer=track_buffer,
+        match_thresh=match_thresh,
+        mot20=mot20,
     )
-
+    tracker = BYTETracker(bt_args, frame_rate=frame_rate)
     f_output_label = open(ip_output_label, 'w')
 
     max_id = -1
@@ -34,51 +45,41 @@ def omni_ocsort_process(
         ip_input_label, frame_size=frame_size, use_file_conf=use_det_conf)
     for frame_num in range(st_frame_num, ed_frame_num + 1):
         list_bbox = dict_input_label.get(frame_num, [])
-        dets = np.array(list_bbox)
-        
+        list_bbox_int = util.box_frac_to_box_int(list_bbox, frame_size)
+        dets = np.array(list_bbox_int)
+
         if dets.size == 0:
             dets = np.empty((0, 5), dtype=float)
-        
+
         img_info = (frame_size[1], frame_size[0], 1.0)
         img_size = (frame_size[1], frame_size[0])
         tracker_time_start = time.perf_counter()
-        tracks = tracker.update(dets, img_info, img_size)
+        online_targets = tracker.update(dets, img_info, img_size)
         tracker_runtime_s += time.perf_counter() - tracker_time_start
-        
-        for t in tracks:
-            x1, y1, x2, y2, track_id = t
-            [[x1, y1, x2, y2]] = util.box_frac_to_box_int([[x1, y1, x2, y2]], frame_size)
-            max_id = max(max_id, int(track_id))
-            w = x2 - x1
-            h = y2 - y1
+
+        for t in online_targets:
+            x1, y1, w, h = t.tlwh
+            track_id = int(t.track_id)
+            max_id = max(max_id, track_id)
             f_output_label.write(
-                f'{frame_num},{int(track_id)},{x1:.2f},{y1:.2f},{w:.2f},{h:.2f},-1,-1,-1,-1\n'
+                f'{frame_num},{track_id},{x1:.2f},{y1:.2f},{w:.2f},{h:.2f},-1,-1,-1,-1\n'
             )
     f_output_label.close()
     return max_id, tracker_runtime_s
+
 
 def main(args):
 
     fp_data = args.path_data
 
-    list_cost_types = args.list_cost_types.split(',')
-    list_weights = [float(w) for w in args.list_weights.split(',')] \
-        if args.list_weights is not None else []
-    str_cost = '_'.join(list_cost_types)
-    name_algo = f'{args.name_algo}_{str_cost}'
-    if not (len(list_cost_types)==len(list_weights) or len(list_cost_types)==0 \
-        or len(list_weights)):
-        print(f"[WARN] Input args for list_cost_types or list_weights are invalid.")
-        print(f"[WARN] Using default settings with (E_fuse=0.5*OmniEuc + 0.5*GIoU).")
-    
     list_seqs_names = sorted([i for i in os.listdir(fp_data) \
         if os.path.isdir(os.path.join(fp_data, i)) and i != '__pycache__'])
     assert len(list_seqs_names) > 0, f'ERROR: no sequence found in {fp_data}.'
-    ip_runtime_log = os.path.join(fp_data, f'rtlog_{name_algo}.txt')
+    ip_runtime_log = os.path.join(fp_data, f'rtlog_{args.name_algo}.txt')
     if os.path.exists(ip_runtime_log):
         os.remove(ip_runtime_log)
     f_log = open(ip_runtime_log, 'w')
-    f_log.write(f'Date of exp: {datetime.datetime.now()}; Algorithm: {name_algo}\n')
+    f_log.write(f'Date of exp: {datetime.datetime.now()}; Algorithm: {args.name_algo}\n')
     f_log.write(
         'Seq_name,Num_frames,Tot_track,TrackerTime(s),TrackerRuntime(ms/frame),'
         'TrackerFPS,RunnerTime(s),RunnerRuntime(ms/frame),RunnerFPS\n'
@@ -89,7 +90,7 @@ def main(args):
         fp_frame = os.path.join(fp_data, seq_name, 'frame')
         assert os.path.exists(ip_input_label), f'ERROR: Input label file {ip_input_label} does not exist.'
 
-        ip_output_label = os.path.join(fp_data, seq_name, f'result_{name_algo}.txt')
+        ip_output_label = os.path.join(fp_data, seq_name, f'result_{args.name_algo}.txt')
         if os.path.exists(ip_output_label):
             os.remove(ip_output_label)
         list_frames = sorted(glob.glob(os.path.join(fp_frame, '*.png')))
@@ -110,11 +111,11 @@ def main(args):
         frame_size = (frame_sample.shape[1], frame_sample.shape[0])
 
         runner_time_start = time.perf_counter()
-        max_id, tracker_runtime_s = omni_ocsort_process(
+        max_id, tracker_runtime_s = bytetrack_process(
             ip_input_label, ip_output_label,
             st_frame_num, ed_frame_num, frame_size,
-            args.max_age, args.min_hits, args.threshold, args.det_thresh,
-            list_cost_types, list_weights, args.speed_correction_method, args.thres_de_velo,
+            args.track_thresh, args.track_buffer, args.match_thresh,
+            args.mot20, args.frame_rate,
             use_det_conf=args.use_det_conf,
         )
         runner_runtime_s = time.perf_counter() - runner_time_start
@@ -134,22 +135,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--path_data', type=str, default='dataset/omni_small/')
     parser.add_argument('--input_label_name', type=str, default='det.txt')
-    parser.add_argument('--max_age', type=int, default=10)
-    parser.add_argument('--min_hits', type=int, default=1)
-    parser.add_argument('--threshold', type=float, default=0.3)
-    parser.add_argument('--name_algo', type=str, default='omni_sort')
-    parser.add_argument('--det_thresh', type=float, default=0.3)
-
-    parser.add_argument('--list_cost_types', type=str, default='giou,euc')
-    parser.add_argument('--list_weights', type=str, default=None)
-    parser.add_argument('--speed_correction_method', type=str, default='signed_principal_wrap')
-    parser.add_argument('--thres_de_velo', type=float, default=10.0)
+    parser.add_argument('--track_thresh', type=float, default=0.6)
+    parser.add_argument('--track_buffer', type=int, default=30)
+    parser.add_argument('--match_thresh', type=float, default=0.8)
+    parser.add_argument('--frame_rate', type=int, default=30)
+    parser.add_argument('--mot20', action='store_true')
     parser.add_argument('--use_det_conf', action='store_true',
-                        help='Use detector confidence (col 7) as detection score, '
-                             'enabling the OCSORT high/low BYTE split. For YOLOX '
-                             'detection inputs; GT inputs stay conf=1.0.')
+                        help='Use detector confidence (col 7) as track score; '
+                             'for YOLOX detection inputs. GT inputs stay conf=1.0.')
+    parser.add_argument('--name_algo', type=str, default='bytetrack_ori')
 
     args = parser.parse_args()
 
     main(args)
-

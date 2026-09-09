@@ -19,7 +19,15 @@ def linear_assignment(cost_matrix):
         x, y = linear_sum_assignment(cost_matrix)
         return np.array(list(zip(x, y)))
 
-def load_input_label(ip_input_label, frame_size, with_id=False):
+def load_input_label(ip_input_label, frame_size, with_id=False, use_file_conf=False):
+    """Load MOT-format labels as fractional [x1,y1,x2,y2,conf] boxes per frame.
+
+    use_file_conf=False (default) hardcodes conf=1.0, matching how every
+    OmniSORT baseline/grid runner has historically ingested detections. Set
+    use_file_conf=True for score-aware trackers (ByteTrack/HybridSORT) on YOLOX
+    detection inputs so the detector confidence (column 7) is preserved; a
+    missing or negative score falls back to 1.0.
+    """
     frame_width, frame_height = frame_size
     assert os.path.exists(ip_input_label), \
         f'ERROR: input label file {ip_input_label} does not exist.'
@@ -33,7 +41,11 @@ def load_input_label(ip_input_label, frame_size, with_id=False):
             y1 = float(parts[3])
             w = float(parts[4])
             h = float(parts[5])
-            conf = 1.0
+            if use_file_conf and len(parts) > 6:
+                raw_conf = float(parts[6])
+                conf = raw_conf if raw_conf >= 0 else 1.0
+            else:
+                conf = 1.0
             x2 = x1 + w
             y2 = y1 + h
             if num_frames not in dict_input_label:

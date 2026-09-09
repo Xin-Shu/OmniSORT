@@ -53,9 +53,49 @@ def iou_batch(bb_test, bb_gt):
   w = np.maximum(0., xx2 - xx1)
   h = np.maximum(0., yy2 - yy1)
   wh = w * h
-  o = wh / ((bb_test[..., 2] - bb_test[..., 0]) * (bb_test[..., 3] - bb_test[..., 1])                                      
-    + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1]) - wh)                                              
-  return(o)  
+  o = wh / ((bb_test[..., 2] - bb_test[..., 0]) * (bb_test[..., 3] - bb_test[..., 1])
+    + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1]) - wh)
+  return(o)
+
+
+def giou_batch(bb_test, bb_gt):
+  """GIoU similarity (higher is better, in (-1,1]) between [x1,y1,x2,y2] boxes.
+  Scale-invariant, so it works directly in pixel coordinates."""
+  bb_gt = np.expand_dims(bb_gt, 0)
+  bb_test = np.expand_dims(bb_test, 1)
+  xx1 = np.maximum(bb_test[..., 0], bb_gt[..., 0])
+  yy1 = np.maximum(bb_test[..., 1], bb_gt[..., 1])
+  xx2 = np.minimum(bb_test[..., 2], bb_gt[..., 2])
+  yy2 = np.minimum(bb_test[..., 3], bb_gt[..., 3])
+  w = np.maximum(0., xx2 - xx1)
+  h = np.maximum(0., yy2 - yy1)
+  wh = w * h
+  union = ((bb_test[..., 2] - bb_test[..., 0]) * (bb_test[..., 3] - bb_test[..., 1])
+           + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1]) - wh)
+  iou = wh / union
+  xxc1 = np.minimum(bb_test[..., 0], bb_gt[..., 0])
+  yyc1 = np.minimum(bb_test[..., 1], bb_gt[..., 1])
+  xxc2 = np.maximum(bb_test[..., 2], bb_gt[..., 2])
+  yyc2 = np.maximum(bb_test[..., 3], bb_gt[..., 3])
+  area_enclose = (xxc2 - xxc1) * (yyc2 - yyc1)
+  giou = iou - (area_enclose - union) / area_enclose
+  return giou
+
+
+def omni_euc_batch(bb_test, bb_gt, img_w, img_h):
+  """Omni-Euclidean similarity (higher is better, in [~0.21,1]).
+  Box centres are normalised by the frame size, the horizontal gap is wrapped
+  at the left-right seam, and the distance is mapped to a similarity by 1-dist.
+  Matches the cost used by OmniSORT/OmniOCSORT (without SAMM)."""
+  cx_t = ((bb_test[:, 0] + bb_test[:, 2]) / 2.0) / float(img_w)
+  cy_t = ((bb_test[:, 1] + bb_test[:, 3]) / 2.0) / float(img_h)
+  cx_g = ((bb_gt[:, 0] + bb_gt[:, 2]) / 2.0) / float(img_w)
+  cy_g = ((bb_gt[:, 1] + bb_gt[:, 3]) / 2.0) / float(img_h)
+  dx = np.abs(cx_t[:, None] - cx_g[None, :])
+  dy = np.abs(cy_t[:, None] - cy_g[None, :])
+  dx = np.minimum(dx, 1.0 - dx)
+  dist = np.sqrt(dx ** 2 + dy ** 2) / np.sqrt(2)
+  return 1.0 - dist
 
 
 def convert_bbox_to_z(bbox):
@@ -146,16 +186,19 @@ class KalmanBoxTracker(object):
     return convert_x_to_bbox(self.kf.x)
 
 
-def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
+def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3, sim_matrix=None):
   """
   Assigns detections to tracked object (both represented as bounding boxes)
 
   Returns 3 lists of matches, unmatched_detections and unmatched_trackers
+
+  sim_matrix: optional precomputed similarity matrix (higher = better). If None,
+  IoU is used. This lets the caller swap in GIoU or Omni-Euclidean similarity.
   """
   if(len(trackers)==0):
     return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,5),dtype=int)
 
-  iou_matrix = iou_batch(detections, trackers)
+  iou_matrix = sim_matrix if sim_matrix is not None else iou_batch(detections, trackers)
 
   if min(iou_matrix.shape) > 0:
     a = (iou_matrix > iou_threshold).astype(np.int32)
@@ -192,15 +235,33 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
 
 
 class Sort(object):
-  def __init__(self, max_age=1, min_hits=3, iou_threshold=0.3):
+  def __init__(self, max_age=1, min_hits=3, iou_threshold=0.3, asso_func='iou', img_size=None):
     """
-    Sets key parameters for SORT
+    Sets key parameters for SORT.
+
+    asso_func: 'iou' (default), 'giou', or 'omni_euc' association cost.
+    img_size:  (width, height) of the frame, required for 'omni_euc'.
     """
     self.max_age = max_age
     self.min_hits = min_hits
     self.iou_threshold = iou_threshold
+    self.asso_func = asso_func
+    self.img_w = img_size[0] if img_size is not None else None
+    self.img_h = img_size[1] if img_size is not None else None
     self.trackers = []
     self.frame_count = 0
+
+  def _sim_matrix(self, dets, trks):
+    if len(dets) == 0 or len(trks) == 0:
+      return None
+    if self.asso_func == 'iou':
+      return iou_batch(dets[:, :4], trks[:, :4])
+    if self.asso_func == 'giou':
+      return giou_batch(dets[:, :4], trks[:, :4])
+    if self.asso_func == 'omni_euc':
+      assert self.img_w is not None, 'omni_euc requires img_size'
+      return omni_euc_batch(dets[:, :4], trks[:, :4], self.img_w, self.img_h)
+    raise ValueError(f'Unknown asso_func: {self.asso_func}')
 
   def update(self, dets=np.empty((0, 5))):
     """
@@ -224,7 +285,8 @@ class Sort(object):
     trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
     for t in reversed(to_del):
       self.trackers.pop(t)
-    matched, unmatched_dets, unmatched_trks = associate_detections_to_trackers(dets,trks, self.iou_threshold)
+    sim_matrix = self._sim_matrix(dets, trks)
+    matched, unmatched_dets, unmatched_trks = associate_detections_to_trackers(dets,trks, self.iou_threshold, sim_matrix)
 
     # update matched trackers with assigned detections
     for m in matched:
