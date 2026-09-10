@@ -8,3 +8,4 @@ archive/
 poster/
 evals/
 *.pth
+.gitignore
